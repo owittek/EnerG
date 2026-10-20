@@ -107,6 +107,7 @@ public final class Engine {
             snapshot = nil
             session.dischargeTarget = nil
             if paused {
+                Policy.clearForPause(&session)
                 apply(.released, snapshot: nil)
             } else if var safe = applied {
                 safe.adapterEnabled = true

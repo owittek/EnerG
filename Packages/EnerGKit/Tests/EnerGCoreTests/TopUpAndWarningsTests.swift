@@ -137,4 +137,17 @@ struct TopUpAndWarningsTests {
         engine.handle(.tick)
         #expect(hw.writes == [.led(.green)])
     }
+
+    @Test func pauseWhileUnreadableEndsTopUp() {
+        let (engine, hw) = started()
+        engine.handle(.command(.topUp))
+        hw.snapshotFails = true
+        #expect(!engine.handle(.command(.setPaused(true))).toppingUp)
+
+        hw.snapshotFails = false
+        hw.writes.removeAll()
+        let status = engine.handle(.command(.setPaused(false)))
+        #expect(hw.writes == [.limit(80), .led(.orange)])
+        #expect(status.state == .charging)
+    }
 }
