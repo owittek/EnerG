@@ -3,8 +3,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate
-xcodebuild -project EnerG.xcodeproj -scheme EnerG -configuration Debug \
-  -derivedDataPath build -allowProvisioningUpdates build | tail -3
+mkdir -p build
+LOG=build/xcodebuild.log
+if ! xcodebuild -project EnerG.xcodeproj -scheme EnerG -configuration Debug \
+  -derivedDataPath build -allowProvisioningUpdates build >"$LOG" 2>&1; then
+  grep -E "error:" "$LOG" | head -20 || true
+  echo "xcodebuild failed; full log: $LOG"
+  exit 1
+fi
+tail -3 "$LOG"
 pkill -x EnerG || true
 rm -rf /Applications/EnerG.app
 ditto build/Build/Products/Debug/EnerG.app /Applications/EnerG.app

@@ -33,7 +33,7 @@ The state where the adapter is connected but the battery is still discharging be
 
 ## Relationships
 
-- A **Discharge** ends at its **Discharge Target**, on sleep, or on lid close.
+- A **Discharge** ends at its **Discharge Target**, on sleep, on lid close, or when the charger is unplugged.
 - **Top Up** and **Pause** both suspend the **Charge Limit**; **Top Up** ends on unplug or when stopped, **Pause** ends only when the user resumes.
 
 ## Flagged ambiguities
