@@ -69,6 +69,10 @@ These get added to the base spec's "Verified platform facts".
    - If one does, `MacHardware` reads `batteryWatts` from it and falls back to the registry when the key is missing.
    - **Otherwise:** keep the registry. When macOS reports no external power (`ExternalConnected` = No) but `batteryWatts > 0`, show "—" for the battery flow until the registry refreshes.
    - The probe result goes into the base spec's facts.
+   - **Probe result (2026-10-20):**
+     - `B0AC` (si16 mA, little-endian) × `B0AV` (ui16 mV) is live and tracks `PSTR` while cut. So the first branch applies, and the "—" fallback is not needed.
+     - The registry also lagged ~50 s on AC, so its cadence is ~60 s regardless of power source.
+     - `PPBR` isn't battery power.
 
 ### App (item 9)
 
