@@ -150,4 +150,14 @@ struct TopUpAndWarningsTests {
         #expect(hw.writes == [.limit(80), .led(.orange)])
         #expect(status.state == .charging)
     }
+
+    @Test func latchedFeatureIsNotRetriedEvenOnWake() {
+        let (engine, hw) = started { $0.failing = [.led] }
+        hw.failing = []
+        engine.handle(.command(.setLEDMode(.off)))
+        engine.handle(.willSleep)
+        engine.handle(.didWake)
+        #expect(!hw.writes.contains { if case .led = $0 { true } else { false } })
+        #expect(engine.handle(.tick).warnings.contains(.unavailable(.led)))
+    }
 }

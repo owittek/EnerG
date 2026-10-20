@@ -250,4 +250,16 @@ struct DischargeTests {
         #expect(hw.writes.isEmpty)
         #expect(status.dischargeTarget == 80)
     }
+
+    @Test func cancelSuppressionClearsAtLimitWithoutUnplug() {
+        let (engine, hw) = dischargingAt92()
+        engine.handle(.command(.cancelDischarge))
+        hw.snap.percent = 80
+        engine.handle(.tick)
+        hw.writes.removeAll()
+        hw.snap.percent = 85
+        let status = engine.handle(.tick)
+        #expect(hw.writes == [.adapter(false), .led(.off), .preventSleep(true)])
+        #expect(status.state == .discharging)
+    }
 }
