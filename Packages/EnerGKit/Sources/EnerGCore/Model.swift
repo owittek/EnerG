@@ -16,6 +16,16 @@ public struct Settings: Codable, Equatable, Sendable {
         self.ledMode = ledMode
         self.paused = paused
     }
+
+    /// Each field falls back to its default when missing or invalid, so adding a field later keeps the others.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Settings()
+        chargeLimit = (try? c.decodeIfPresent(Int.self, forKey: .chargeLimit)) ?? d.chargeLimit
+        autoDischarge = (try? c.decodeIfPresent(Bool.self, forKey: .autoDischarge)) ?? d.autoDischarge
+        ledMode = (try? c.decodeIfPresent(LEDMode.self, forKey: .ledMode)) ?? d.ledMode
+        paused = (try? c.decodeIfPresent(Bool.self, forKey: .paused)) ?? d.paused
+    }
 }
 
 /// How EnerG drives the MagSafe LED.

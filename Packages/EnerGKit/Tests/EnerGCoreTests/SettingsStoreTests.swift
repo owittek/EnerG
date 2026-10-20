@@ -2,9 +2,17 @@ import Foundation
 import Testing
 @testable import EnerGCore
 
-struct SettingsStoreTests {
-    let url = FileManager.default.temporaryDirectory
-        .appending(path: "energ-tests-\(UUID().uuidString)/nested/settings.json")
+/// A class so `deinit` can remove each test's temp directory.
+final class SettingsStoreTests {
+    let root = FileManager.default.temporaryDirectory.appending(path: "energ-tests-\(UUID().uuidString)")
+    var url: URL { root.appending(path: "nested/settings.json") }
+
+    deinit { try? FileManager.default.removeItem(at: root) }
+
+    private func write(_ text: String) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url)
+    }
 
     @Test func missingFileLoadsDefaults() {
         #expect(SettingsStore(url: url).load() == Settings())
@@ -24,8 +32,17 @@ struct SettingsStoreTests {
     }
 
     @Test func corruptFileLoadsDefaults() throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("not json".utf8).write(to: url)
+        try write("not json")
         #expect(SettingsStore(url: url).load() == Settings())
+    }
+
+    @Test func missingFieldDefaultsOnlyThatField() throws {
+        try write(#"{"chargeLimit":90,"autoDischarge":false,"paused":true}"#)
+        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, autoDischarge: false, ledMode: .auto, paused: true))
+    }
+
+    @Test func invalidFieldDefaultsOnlyThatField() throws {
+        try write(#"{"chargeLimit":90,"autoDischarge":false,"ledMode":"rainbow","paused":true}"#)
+        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, autoDischarge: false, ledMode: .auto, paused: true))
     }
 }
