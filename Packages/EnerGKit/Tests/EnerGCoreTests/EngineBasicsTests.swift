@@ -11,6 +11,26 @@ struct EngineBasicsTests {
         #expect(status.warnings.isEmpty)
     }
 
+    // A crash mid-Discharge leaves CHIE cut above the native limit: the start must unstick it.
+    @Test func startAboveLimitReappliesNativeLimit() {
+        let hw = FakeHardware()
+        hw.snap.percent = 85
+        hw.snap.isCharging = false
+        let engine = Engine(hardware: hw, settings: Settings(autoDischarge: false))
+        engine.handle(.start)
+        #expect(hw.writes == [.adapter(true), .adapter(true), .limit(nil), .limit(80), .led(.green), .preventSleep(false)])
+    }
+
+    @Test func wakeAboveLimitReappliesNativeLimit() {
+        let (engine, hw) = started(Settings(autoDischarge: false)) {
+            $0.snap.percent = 85
+            $0.snap.isCharging = false
+        }
+        engine.handle(.willSleep)
+        engine.handle(.didWake)
+        #expect(hw.writes == [.adapter(true), .limit(nil), .limit(80), .led(.green), .preventSleep(false)])
+    }
+
     @Test func repeatedEventsWriteNothing() {
         let (engine, hw) = started()
         engine.handle(.tick)

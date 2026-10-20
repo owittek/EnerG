@@ -129,9 +129,9 @@ public final class Engine {
         if changed(\.adapterEnabled, to: next) {
             if next.adapterEnabled {
                 enableFailed = !enableAdapter()
-                // Adapter back on above the native limit after a cut: macOS stays on battery until the
-                // limit is disabled and set again.
-                if !enableFailed, applied?.adapterEnabled == false,
+                // Adapter back on above the native limit after a cut, or after a start or wake where a cut
+                // may still be in place: macOS stays on battery until the limit is disabled and set again.
+                if !enableFailed, applied?.adapterEnabled != true,
                    let limit = next.chargeLimit, let snapshot, snapshot.percent > limit {
                     reapplyLimit = true
                 }

@@ -192,9 +192,11 @@ struct DischargeTests {
     }
 
     @Test func startClearsAStaleDischarge() {
-        let (engine, hw) = dischargingAt92()
-        hw.snap.percent = 85
-        engine.handle(.start)
-        #expect(hw.writes.first == .adapter(true))
+        let (engine, hw) = started()   // 70 %
+        engine.handle(.command(.discharge(to: 50)))
+        hw.writes.removeAll()
+        let status = engine.handle(.start)
+        #expect(hw.writes == [.adapter(true), .adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
+        #expect(status.dischargeTarget == nil)
     }
 }
