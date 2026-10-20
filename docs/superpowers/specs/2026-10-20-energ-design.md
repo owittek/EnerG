@@ -142,3 +142,12 @@ energ/
 1. **Signing:** confirm that `SMAppService.daemon` registers and launches a daemon embedded in an app signed with the free Apple Development certificate, and that root writes to `CHIE`/`ACLC` and `setMCLLimit` work from that daemon.
 2. **Physical adapter presence while `CHIE`=`08`:** find a signal (candidates: `AC-W` SMC key, `IOPSCopyExternalPowerAdapterDetails`, `AdapterDetails`). Fallback if none exists: the UI shows "adapter state unknown" during a Discharge.
 3. **5% native band:** log % and charging state passively at the limit with AlDente fully stopped. This confirms that Sailing is not needed. The outcome only affects documentation.
+
+## Changes during planning (2026-10-20)
+
+See the "Deviations from spec" section of `docs/superpowers/plans/2026-10-20-energ.md`. In short:
+- The package is `EnerGKit`, with `EnerGCore` and `EnerGMac`; `MacHardware` lives in the package.
+- Spikes 2 and 3 are dropped.
+- The Optimized Charging warning is dropped.
+- `.lidClosed` becomes `.lid(closed:)`. No Discharge starts while asleep or with the lid closed.
+- The tick runs every 30 s unconditionally.
