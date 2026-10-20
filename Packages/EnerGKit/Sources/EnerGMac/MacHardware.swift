@@ -3,13 +3,15 @@ import IOKit
 import IOKit.pwr_mgt
 import CPlatform
 import EnerGCore
+import OSLog
 
-/// The real Mac: AppleSMC (CHIE adapter cut, ACLC LED, PSTR system power, AC-W plug presence), PowerUI native
+/// The real Mac: AppleSMC (CHIE adapter cut, ACLC LED, PSTR system power, AC-W plug presence, B0AC/B0AV battery power), PowerUI native
 /// Charge Limit, and the AppleSmartBattery registry entry. Writes need root.
 /// SMC reads straight after a write can return the old value; the Engine never reads back, so this is harmless.
 public final class MacHardware: Hardware {
     private let smc: io_connect_t
     private var sleepAssertion: IOPMAssertionID = 0
+    private let log = Logger(subsystem: "app.energ", category: "hardware")
 
     public init() throws {
         var conn: io_connect_t = 0
@@ -36,7 +38,7 @@ public final class MacHardware: Hardware {
             isCharging: p["IsCharging"] as? Bool ?? false,
             adapterConnected: plugged ?? (p["ExternalConnected"] as? Bool ?? false),
             adapterWatts: (adapter?["Watts"] as? NSNumber)?.intValue,
-            batteryWatts: milliamps * millivolts / 1_000_000,
+            batteryWatts: liveBatteryWatts() ?? milliamps * millivolts / 1_000_000,
             systemWatts: (try? readFloat("PSTR")).map(Double.init),
             plugSensed: plugged != nil
         )
@@ -68,9 +70,14 @@ public final class MacHardware: Hardware {
 
     public func setPreventSleep(_ on: Bool) {
         if on, sleepAssertion == 0 {
-            IOPMAssertionCreateWithName("PreventUserIdleSystemSleep" as CFString,
-                                        IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                        "EnerG Discharge" as CFString, &sleepAssertion)
+            let rc = IOPMAssertionCreateWithName("PreventUserIdleSystemSleep" as CFString,
+                                                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                                 "EnerG Discharge" as CFString, &sleepAssertion)
+            // Without it the Mac may idle-sleep, and willSleep then ends the Discharge safely.
+            if rc != kIOReturnSuccess {
+                sleepAssertion = 0
+                log.error("sleep assertion failed: \(rc, privacy: .public)")
+            }
         } else if !on, sleepAssertion != 0 {
             IOPMAssertionRelease(sleepAssertion)
             sleepAssertion = 0
@@ -92,23 +99,33 @@ public final class MacHardware: Hardware {
     /// `AC-W` (si8): > 0 while a charger is physically plugged in, also while CHIE cuts it
     /// (ExternalConnected then reads No); -1 when unplugged. nil if the key is missing or unreadable.
     private func physicallyPlugged() -> Bool? {
-        var buf = [UInt8](repeating: 0, count: 32)
-        var size: UInt32 = 0
-        var result: UInt8 = 0
-        let kr = smc_read(smc, "AC-W", &buf, &size, &result)
-        guard (try? checkSMC(kr, result, "AC-W")) != nil, size == 1 else { return nil }
-        return Int8(bitPattern: buf[0]) > 0
+        guard let bytes = try? read("AC-W", size: 1) else { return nil }
+        return Int8(bitPattern: bytes[0]) > 0
+    }
+
+    /// Battery power from `B0AC` (si16 mA, negative while discharging) × `B0AV` (ui16 mV). Live, unlike the
+    /// registry, which refreshes about once a minute. nil if either key can't be read.
+    private func liveBatteryWatts() -> Double? {
+        guard let current = try? read("B0AC", size: 2), let voltage = try? read("B0AV", size: 2) else { return nil }
+        let milliamps = Int16(bitPattern: UInt16(current[0]) | UInt16(current[1]) << 8)
+        let millivolts = UInt16(voltage[0]) | UInt16(voltage[1]) << 8
+        return Double(milliamps) * Double(millivolts) / 1_000_000
     }
 
     private func readFloat(_ key: String) throws -> Float {
+        let b = try read(key, size: 4)
+        return Float(bitPattern: UInt32(b[0]) | UInt32(b[1]) << 8 | UInt32(b[2]) << 16 | UInt32(b[3]) << 24)
+    }
+
+    /// Reads a key that must be exactly `size` bytes (little-endian on Apple Silicon).
+    private func read(_ key: String, size expected: UInt32) throws -> [UInt8] {
         var buf = [UInt8](repeating: 0, count: 32)
         var size: UInt32 = 0
         var result: UInt8 = 0
         let kr = smc_read(smc, key, &buf, &size, &result)
         try checkSMC(kr, result, key)
-        guard size == 4 else { throw HardwareError.keyMissing(key) }
-        let bits = UInt32(buf[0]) | UInt32(buf[1]) << 8 | UInt32(buf[2]) << 16 | UInt32(buf[3]) << 24
-        return Float(bitPattern: bits)
+        guard size == expected else { throw HardwareError.keyMissing(key) }
+        return Array(buf.prefix(Int(size)))
     }
 
     private func checkSMC(_ kr: kern_return_t, _ result: UInt8, _ key: String) throws {
