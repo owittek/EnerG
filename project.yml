@@ -1,0 +1,61 @@
+name: EnerG
+options:
+  bundleIdPrefix: app.energ
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: XG5GU82KF7
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    ENABLE_HARDENED_RUNTIME: YES
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  EnerGKit:
+    path: Packages/EnerGKit
+targets:
+  EnerG:
+    type: application
+    platform: macOS
+    scheme: {}
+    sources:
+      - path: EnerG
+      - path: energd/app.energ.energd.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - package: EnerGKit
+        product: EnerGCore
+      - target: energd
+        embed: true
+        copy:
+          destination: executables
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.energ.EnerG
+        PRODUCT_NAME: EnerG
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: EnerG
+  energd:
+    type: tool
+    platform: macOS
+    sources:
+      - path: energd
+        excludes:
+          - "*.plist"
+    dependencies:
+      - package: EnerGKit
+        product: EnerGCore
+      - package: EnerGKit
+        product: EnerGMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.energ.energd
+        PRODUCT_NAME: energd
+        SKIP_INSTALL: YES
