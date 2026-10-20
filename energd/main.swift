@@ -25,15 +25,29 @@ let sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 sigterm.setEventHandler { host.shutdown(exitCode: 0) }
 sigterm.resume()
 
+/// Decodes each request itself, so a malformed message is logged and its session cancelled
+/// (the client's reply handler then gets an error) instead of being left to the typed overlay.
+struct RequestHandler: XPCPeerHandler {
+    let session: XPCSession
+
+    func handleIncomingRequest(_ message: XPCReceivedMessage) -> (any Encodable)? {
+        do {
+            return host.handle(.command(try message.decode(as: Request.self)))
+        } catch {
+            log.error("undecodable request: \(String(describing: error), privacy: .public)")
+            session.cancel(reason: "undecodable request")
+            return nil
+        }
+    }
+}
+
 // Created before `.start`, so a listener failure exits without having touched the hardware.
 func makeListener() -> XPCListener {
     do {
         // Only EnerG.app may connect.
         return try XPCListener(service: DaemonID.machService,
                                requirement: .isFromSameTeam(andMatchesSigningIdentifier: "app.energ.EnerG")) { request in
-            request.accept(incomingMessageHandler: { (message: Request) -> (any Encodable)? in
-                host.handle(.command(message))
-            })
+            request.accept { session in RequestHandler(session: session) }
         }
     } catch {
         log.fault("XPC listener failed: \(String(describing: error), privacy: .public)")
