@@ -145,6 +145,10 @@ private struct BatteryTile: View {
             Slider(value: Binding(get: { limit }, set: { draftLimit = $0 }), in: 80...100, step: 5,
                    onEditingChanged: { editing in
                        guard !editing, let draft = draftLimit else { return }
+                       guard Int(draft) != status.settings.chargeLimit else {
+                           draftLimit = nil
+                           return
+                       }
                        Task {
                            await model.perform(.setLimit(Int(draft)))
                            draftLimit = nil
@@ -209,10 +213,11 @@ private struct ControlGrid: View {
                 ToggleTile(symbol: "battery.25percent", title: "Discharge",
                            subtitle: status.dischargeTarget.map { "To \($0)% · click stop" } ?? "Run on battery",
                            isOn: discharging, disabled: dischargeDisabled) {
-                    if discharging {
+                    guard let current = model.status else { return }
+                    if current.dischargeTarget != nil {
                         Task { await model.perform(.cancelDischarge) }
                     } else {
-                        model.dischargeTarget = status.defaultDischargeTarget
+                        model.dischargeTarget = current.defaultDischargeTarget
                         choosingTarget = true
                     }
                 }
@@ -223,26 +228,30 @@ private struct ControlGrid: View {
                            subtitle: status.settings.autoDischarge ? "Down to limit" : "Off",
                            isOn: status.settings.autoDischarge,
                            disabled: paused || status.isUnavailable(.discharge)) {
-                    Task { await model.perform(.setAutoDischarge(!status.settings.autoDischarge)) }
+                    guard let current = model.status else { return }
+                    Task { await model.perform(.setAutoDischarge(!current.settings.autoDischarge)) }
                 }
             }
             GridRow {
                 ToggleTile(symbol: "bolt.fill", title: "Top Up",
                            subtitle: toppingUp ? "Click to stop" : "Once to 100%",
                            isOn: toppingUp, disabled: paused) {
-                    Task { await model.perform(toppingUp ? .cancelTopUp : .topUp) }
+                    guard let current = model.status else { return }
+                    Task { await model.perform(current.toppingUp ? .cancelTopUp : .topUp) }
                 }
                 ToggleTile(symbol: "pause.fill", title: "Pause",
                            subtitle: paused ? "macOS charging" : "EnerG active",
                            isOn: paused) {
-                    Task { await model.perform(.setPaused(!paused)) }
+                    guard let current = model.status else { return }
+                    Task { await model.perform(.setPaused(current.state != .paused)) }
                 }
             }
             GridRow {
                 ToggleTile(symbol: "lightbulb.fill", title: "MagSafe LED",
                            subtitle: status.settings.ledMode.label,
                            isOn: status.settings.ledMode != .off, disabled: status.isUnavailable(.led)) {
-                    Task { await model.perform(.setLEDMode(status.settings.ledMode.next)) }
+                    guard let current = model.status else { return }
+                    Task { await model.perform(.setLEDMode(current.settings.ledMode.next)) }
                 }
                 ToggleTile(symbol: "power", title: "Launch at Login",
                            subtitle: model.launchAtLogin ? "On" : "Off",
@@ -345,7 +354,7 @@ private struct Footer: View {
     var body: some View {
         HStack {
             Button("Uninstall Helper") { Task { await model.uninstallHelper() } }
-                .disabled(model.helper != .enabled)
+                .disabled(model.helper != .enabled && model.helper != .requiresApproval)
             Spacer()
             Button("Quit EnerG") { NSApplication.shared.terminate(nil) }
         }

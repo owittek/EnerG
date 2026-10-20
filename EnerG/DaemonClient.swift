@@ -9,9 +9,14 @@ struct DaemonClient: Sendable {
             do {
                 let session = try XPCSession(machService: DaemonID.machService, options: .privileged,
                                              requirement: .isFromSameTeam())
-                try session.send(request) { (result: Result<Status, any Error>) in
-                    session.cancel(reason: "done")
-                    continuation.resume(with: result)
+                do {
+                    try session.send(request) { (result: Result<Status, any Error>) in
+                        session.cancel(reason: "done")
+                        continuation.resume(with: result)
+                    }
+                } catch {
+                    session.cancel(reason: "send failed")
+                    throw error
                 }
             } catch {
                 continuation.resume(throwing: error)

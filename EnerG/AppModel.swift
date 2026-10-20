@@ -22,6 +22,7 @@ final class AppModel {
 
     private let client = DaemonClient()
     private var polling: Task<Void, Never>?
+    private var lastAlDenteScan: ContinuousClock.Instant?
     private var requestSeq = 0
     private var appliedSeq = 0
 
@@ -29,7 +30,9 @@ final class AppModel {
         // Launch at login defaults to on, once.
         let key = "launchAtLoginInitialized"
         if !UserDefaults.standard.bool(forKey: key) {
-            try? HelperInstaller.setLaunchAtLogin(true)
+            do { try HelperInstaller.setLaunchAtLogin(true) } catch {
+                actionError = "Couldn't turn on Launch at Login: \(error.localizedDescription)"
+            }
             UserDefaults.standard.set(true, forKey: key)
             launchAtLogin = HelperInstaller.launchAtLogin
         }
@@ -37,6 +40,7 @@ final class AppModel {
 
     func startPolling() {
         polling?.cancel()
+        lastAlDenteScan = nil
         polling = Task {
             while !Task.isCancelled {
                 await refresh()
@@ -52,9 +56,16 @@ final class AppModel {
 
     func refresh() async {
         helper = HelperInstaller.status
-        alDenteRunning = NSWorkspace.shared.runningApplications
-            .contains { $0.bundleIdentifier == "com.apphousekitchen.aldente-pro" }
-            || Self.isProcessRunning(executable: "com.apphousekitchen.aldente-pro.helper")
+        let now = ContinuousClock.now
+        if lastAlDenteScan.map({ $0.duration(to: now) >= .seconds(10) }) ?? true {
+            lastAlDenteScan = now
+            // ~700 proc_pidpath calls: keep them off the main actor.
+            let helperRunning = await Task.detached {
+                Self.isProcessRunning(executable: "com.apphousekitchen.aldente-pro.helper")
+            }.value
+            alDenteRunning = helperRunning || NSWorkspace.shared.runningApplications
+                .contains { $0.bundleIdentifier == "com.apphousekitchen.aldente-pro" }
+        }
         guard helper == .enabled else {
             status = nil
             daemonError = nil
@@ -100,8 +111,8 @@ final class AppModel {
         if helper == .requiresApproval { HelperInstaller.openApproval() }
     }
 
-    /// `skipRelease`: "Uninstall Anyway" after a failed release. energd's SIGTERM stop still turns the
-    /// adapter on and hands the LED back; only the native Charge Limit may stay on.
+    /// `skipRelease`: "Uninstall Anyway" after a failed release. If energd is still running, its SIGTERM stop
+    /// turns the adapter on and hands the LED back; if not, they stay as last set. The native Charge Limit may stay on.
     func uninstallHelper(skipRelease: Bool = false) async {
         actionError = nil
         // Never unregister a daemon that may still hold the adapter off or the LED forced.
@@ -110,8 +121,9 @@ final class AppModel {
                 _ = try await client.send(.release)
             } catch {
                 actionError = "Couldn't release charging control, so the helper wasn't uninstalled: "
-                    + "\(error.localizedDescription). Uninstall Anyway restores the adapter and LED, "
-                    + "but the native macOS Charge Limit may stay on."
+                    + "\(error.localizedDescription). Uninstall Anyway removes the helper without handing "
+                    + "charging back first. If the helper is still running, it restores the adapter and LED "
+                    + "as it stops; if not, they may stay as last set. The native Charge Limit may stay on."
                 offersUninstallAnyway = true
                 return
             }
@@ -131,7 +143,7 @@ final class AppModel {
 
     /// Looks for a process by executable name across all users. proc_name fails for other users'
     /// processes when unprivileged (and truncates long names); proc_pidpath doesn't.
-    private static func isProcessRunning(executable: String) -> Bool {
+    nonisolated private static func isProcessRunning(executable: String) -> Bool {
         let capacity = proc_listallpids(nil, 0)
         guard capacity > 0 else { return false }
         var pids = [pid_t](repeating: 0, count: Int(capacity) + 32)
