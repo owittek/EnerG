@@ -71,6 +71,18 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         self.systemWatts = systemWatts
         self.plugSensed = plugSensed
     }
+
+    /// `plugSensed` defaults to true when missing, so an app can read an older energd's Status.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        percent = try c.decode(Int.self, forKey: .percent)
+        isCharging = try c.decode(Bool.self, forKey: .isCharging)
+        adapterConnected = try c.decode(Bool.self, forKey: .adapterConnected)
+        adapterWatts = try c.decodeIfPresent(Int.self, forKey: .adapterWatts)
+        batteryWatts = try c.decode(Double.self, forKey: .batteryWatts)
+        systemWatts = try c.decodeIfPresent(Double.self, forKey: .systemWatts)
+        plugSensed = try c.decodeIfPresent(Bool.self, forKey: .plugSensed) ?? true
+    }
 }
 
 /// A hardware-backed capability that can become unavailable when its write fails.

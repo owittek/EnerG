@@ -12,6 +12,14 @@ struct ProtocolTests {
         #expect(try JSONDecoder().decode(Request.self, from: data) == request)
     }
 
+    @Test func snapshotWithoutPlugSensedDecodes() throws {
+        let json = #"{"percent":81,"isCharging":false,"adapterConnected":true,"adapterWatts":60,"batteryWatts":-5.5,"systemWatts":11}"#
+        let snapshot = try JSONDecoder().decode(BatterySnapshot.self, from: Data(json.utf8))
+        #expect(snapshot == BatterySnapshot(percent: 81, isCharging: false, adapterConnected: true,
+                                            adapterWatts: 60, batteryWatts: -5.5, systemWatts: 11))
+        #expect(snapshot.plugSensed)
+    }
+
     @Test func statusRoundTrips() throws {
         let status = Status(
             state: .discharging,

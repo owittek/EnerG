@@ -103,7 +103,7 @@ public final class Engine {
         do {
             snapshot = try hardware.snapshot()
         } catch {
-            // Can't see the battery: stop any Discharge, keep everything else as is.
+            // Can't see the battery: stop any Discharge; Pause still clears every running mode, otherwise keep everything else as is.
             snapshot = nil
             session.dischargeTarget = nil
             if paused {

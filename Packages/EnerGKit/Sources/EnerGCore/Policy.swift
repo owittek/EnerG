@@ -4,8 +4,8 @@ struct Session: Equatable {
     var dischargeTarget: Int? {
         didSet { if oldValue != nil, dischargeTarget == nil { dischargeJustEnded = true } }
     }
-    /// A Discharge ended and no tick has run since. That tick's battery current still reflects the cut,
-    /// so it doesn't count as a Weak Adapter sample.
+    /// A Discharge ended and no tick has run since. That tick's battery current may still reflect the cut
+    /// (the registry fallback lags about a minute), so it doesn't count as a Weak Adapter sample.
     var dischargeJustEnded = false
     var toppingUp = false
     /// Blocks Auto-Discharge after the user cancels one; cleared on unplug or at/below the limit.
