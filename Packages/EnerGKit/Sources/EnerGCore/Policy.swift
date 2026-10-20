@@ -31,7 +31,7 @@ enum Policy {
     /// Pause, or released before uninstall.
     static func isPaused(_ settings: Settings, _ s: Session) -> Bool { settings.paused || s.released }
 
-    /// Advances the session for a fresh snapshot: ends Top Up and suppression on unplug,
+    /// Advances the session for a fresh snapshot: ends a Discharge, Top Up and suppression on unplug,
     /// ends a finished Discharge, starts Auto-Discharge, and tracks Weak Adapter samples.
     /// `countsWeakSample`: only periodic readings (tick, power change) count towards a Weak Adapter;
     /// other events can only reset the count.
@@ -42,6 +42,10 @@ enum Policy {
             s.autoSuppressed = false
             s.weakSamples = 0
             return
+        }
+        // Unplugged mid-Discharge. Only trusted from AC-W: on the fallback a cut itself reads as unplugged.
+        if s.dischargeTarget != nil, snapshot.plugSensed, !snapshot.adapterConnected {
+            s.dischargeTarget = nil
         }
         if s.dischargeTarget == nil && !snapshot.adapterConnected {
             s.toppingUp = false

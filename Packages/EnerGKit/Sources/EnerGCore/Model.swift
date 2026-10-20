@@ -47,15 +47,19 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
     public var batteryWatts: Double
     /// Total system draw, if known.
     public var systemWatts: Double?
+    /// `adapterConnected` was read from `AC-W`, so it stays true while EnerG cuts the adapter.
+    /// False on the `ExternalConnected` fallback, where a cut itself reads as unplugged.
+    public var plugSensed: Bool
 
     public init(percent: Int, isCharging: Bool, adapterConnected: Bool,
-                adapterWatts: Int?, batteryWatts: Double, systemWatts: Double?) {
+                adapterWatts: Int?, batteryWatts: Double, systemWatts: Double?, plugSensed: Bool = true) {
         self.percent = percent
         self.isCharging = isCharging
         self.adapterConnected = adapterConnected
         self.adapterWatts = adapterWatts
         self.batteryWatts = batteryWatts
         self.systemWatts = systemWatts
+        self.plugSensed = plugSensed
     }
 }
 

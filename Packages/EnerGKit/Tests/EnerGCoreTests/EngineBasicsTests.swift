@@ -215,4 +215,13 @@ struct EngineBasicsTests {
         #expect(hw.writes.isEmpty)
         #expect(status.dischargeTarget == nil)
     }
+
+    @Test func dischargeRequestedJustAfterUnplugIsDropped() {
+        let (engine, hw) = started()   // last snapshot: plugged in
+        hw.snap.adapterConnected = false   // unplugged since, with no event yet
+        hw.snap.isCharging = false
+        let status = engine.handle(.command(.discharge(to: 50)))
+        #expect(hw.writes == [.led(.system)])
+        #expect(status.dischargeTarget == nil)
+    }
 }

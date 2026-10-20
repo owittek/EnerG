@@ -23,7 +23,7 @@ struct DischargeTests {
 
         hw.writes.removeAll()
         hw.snap.percent = 80
-        hw.snap.adapterConnected = false      // CHIE=08 hides the adapter
+        hw.snap.adapterConnected = false
         hw.snap.batteryWatts = -15
         status = engine.handle(.tick)
         #expect(hw.writes == [.adapter(true), .led(.system), .preventSleep(false)])
@@ -221,5 +221,33 @@ struct DischargeTests {
         let status = engine.handle(.start)
         #expect(hw.writes == [.adapter(true), .adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
         #expect(status.dischargeTarget == nil)
+    }
+
+    @Test func unplugEndsDischargeAndReplugRearmsAutoDischarge() {
+        let (engine, hw) = dischargingAt92()
+        hw.snap.adapterConnected = false
+        hw.snap.batteryWatts = -15
+        var status = engine.handle(.powerChanged)
+        #expect(hw.writes == [.adapter(true), .limit(nil), .limit(80), .led(.system), .preventSleep(false)])
+        #expect(status.dischargeTarget == nil)
+        #expect(status.state == .onBattery)
+
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = true
+        status = engine.handle(.powerChanged)
+        #expect(hw.writes == [.adapter(false), .led(.off), .preventSleep(true)])
+        #expect(status.state == .discharging)
+    }
+
+    @Test func fallbackPlugSignalKeepsDischargeWhenCutHidesAdapter() {
+        let (engine, hw) = started { $0.snap.plugSensed = false }
+        hw.snap.percent = 92
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = false   // ExternalConnected reads No while CHIE cuts the adapter
+        let status = engine.handle(.tick)
+        #expect(hw.writes.isEmpty)
+        #expect(status.dischargeTarget == 80)
     }
 }

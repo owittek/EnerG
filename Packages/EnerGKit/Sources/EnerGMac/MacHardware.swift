@@ -30,13 +30,15 @@ public final class MacHardware: Hardware {
         let milliamps = Double(number("InstantAmperage")?.int64Value ?? 0)
         let millivolts = Double(number("Voltage")?.int64Value ?? 0)
         let adapter = p["AdapterDetails"] as? [String: Any]
+        let plugged = physicallyPlugged()
         return BatterySnapshot(
             percent: percent,
             isCharging: p["IsCharging"] as? Bool ?? false,
-            adapterConnected: physicallyPlugged() ?? (p["ExternalConnected"] as? Bool ?? false),
+            adapterConnected: plugged ?? (p["ExternalConnected"] as? Bool ?? false),
             adapterWatts: (adapter?["Watts"] as? NSNumber)?.intValue,
             batteryWatts: milliamps * millivolts / 1_000_000,
-            systemWatts: (try? readFloat("PSTR")).map(Double.init)
+            systemWatts: (try? readFloat("PSTR")).map(Double.init),
+            plugSensed: plugged != nil
         )
     }
 
