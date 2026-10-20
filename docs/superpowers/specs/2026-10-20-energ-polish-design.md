@@ -118,3 +118,12 @@ These get added to the base spec's "Verified platform facts".
   - **Item 3:** with the adapter cut during a Discharge, unplug every charger. The Discharge ends, and on replug Auto-Discharge resumes if the battery is above the limit.
   - **Item 6:** after a Discharge ends, there is no Weak Adapter warning.
   - **Item 10:** the battery flow is correct within seconds of a cut, or shows "—".
+
+## Outcome (2026-10-20)
+
+All four on-device checks passed, for items 1, 3, 6 and 10.
+
+Open issues for the next round:
+1. **False Weak Adapter above the limit.** The native limit drains the battery to the limit while it reports "AC Power" (see the base spec's facts). Weak Adapter then fires with the adapter healthy. Observed on device after a Top Up was stopped at 82 %.
+2. **Auto-Discharge off doesn't hold above the limit.** For the same reason, the glossary's "hold above the limit" doesn't happen on this firmware. Revisit what Auto-Discharge adds beyond the adapter cut.
+3. **Battery unreadable mid-Discharge.** The adapter is re-enabled with no native-limit re-apply (`Engine.evaluate` catch path), so the stuck state can survive this one path. Parked by the final review: it predates this round and is rare.

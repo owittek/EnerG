@@ -47,6 +47,12 @@ Notes:
 - **LED without MagSafe:** `ACLC` writes succeed with USB-C only, with no visible effect. So there is no false "LED unavailable".
 - **Registry cadence:** the `AppleSmartBattery` registry refreshes about every 60 s (`UpdateTime`), on AC and on battery. The 2026-10-20 probe saw `UpdateTime` lag 50 s on AC too. While `CHIE` cuts the adapter, `InstantAmperage` keeps the last pre-cut value for up to a minute. `PSTR` (SMC) is live.
 - **Live battery power:** `B0AC` (si16 mA) and `B0AV` (ui16 mV), little-endian, are readable unprivileged and live. Their product tracks `PSTR` while cut. `PPBR` isn't battery power.
+- **Native limit drains to the limit (2026-10-20, Mac17,8):**
+  - With the adapter on and the battery above a set native limit, macOS reports "AC Power" / "AC attached", yet the battery supplies roughly the whole system draw: `B0AC` ≈ −0.6…−1.1 A, about −11 W at 82 % with an 80 % limit.
+  - This happens after a plain limit set too (Pause → resume, no cut involved), so it is firmware behaviour, not the unstick.
+  - Consequences, open for the next round:
+    - Auto-Discharge off doesn't hold above the limit.
+    - The Weak Adapter rule fires falsely there. This was observed on device.
 
 ## Behaviour
 
