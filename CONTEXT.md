@@ -19,7 +19,7 @@ The percentage at which a **Discharge** stops. Defaults to the **Charge Limit**;
 Starting a **Discharge** automatically whenever the battery is above the **Charge Limit**.
 
 **Top Up**:
-A one-shot charge to 100% that ignores the **Charge Limit** until the adapter is unplugged.
+A one-shot charge to 100% that ignores the **Charge Limit** until the adapter is unplugged or the user stops it.
 
 **LED Mode**:
 How EnerG drives the MagSafe LED: Auto (reflects charging / at limit / discharging), Off, or Blink while discharging.
@@ -34,7 +34,7 @@ The state where the adapter is connected but the battery is still discharging be
 ## Relationships
 
 - A **Discharge** ends at its **Discharge Target**, on sleep, or on lid close.
-- **Top Up** and **Pause** both suspend the **Charge Limit**; **Top Up** ends on unplug, **Pause** ends only when the user resumes.
+- **Top Up** and **Pause** both suspend the **Charge Limit**; **Top Up** ends on unplug or when stopped, **Pause** ends only when the user resumes.
 
 ## Flagged ambiguities
 

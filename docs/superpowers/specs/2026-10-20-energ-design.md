@@ -58,7 +58,7 @@ Rules:
 - **Discharge Target:** defaults to the Charge Limit. It can be below 80. A manual Discharge replaces any Auto-Discharge in progress.
 - **When a Discharge ends:** on reaching the target, on `willSleep`, on lid close, on cancel, and on daemon restart. A manual Discharge is not persisted across a restart. Auto-Discharge simply re-triggers if the battery is still above the limit.
 - **Sleep:** the `willSleep` handler turns the adapter on before it acknowledges the power change. The native limit persists through sleep on its own.
-- **Top Up:** cancels any Discharge, so the adapter is on and `ExternalConnected` is reliable. It ends on unplug, and the limit is restored. On the next plug-in at >limit with Auto-Discharge on, a Discharge starts. This is intended.
+- **Top Up:** can be stopped early (`cancelTopUp`). It cancels any Discharge, so the adapter is on and `ExternalConnected` is reliable. It ends on unplug, and the limit is restored. On the next plug-in at >limit with Auto-Discharge on, a Discharge starts. This is intended.
 - **Pause:** restores stock behaviour fully. Native limit disabled, adapter on, LED `00`, no sleep assertion. The daemon keeps running, and Resume re-applies everything.
 - **LED modes:**
   - Auto: the table above.
@@ -76,7 +76,7 @@ The app, the daemon, and the core package are three modules that share one XPC c
 |---|---|---|---|---|
 | **Engine** (`EnerGCore`) | `init(hardware:, settings:)`; `handle(_ event: Event) -> Status`, synchronous; `settings` (get/set). `Event` ∈ `.start`, `.tick`, `.powerChanged`, `.willSleep`, `.didWake`, `.lidClosed`, `.command(Request)`. **Invariants:** `.start` writes adapter-on before anything else; `.willSleep` returns only after adapter-on has been applied; writes happen only on change (diffed against the last applied **Actuation**). | Its own interface. **Policy** is an internal seam: a pure `(Settings, BatterySnapshot, Session) → Actuation`, not exported. | Deep: holds every rule in Behaviour. Callers only feed it events. | Event-sequence tests against `FakeHardware`, asserting the recorded writes. |
 | **Hardware** port (`EnerGCore`) | `snapshot() throws -> BatterySnapshot` (percent, isCharging, adapterConnected, adapterWatts, batteryWatts, systemWatts); `setChargeLimit(Int?) throws` (nil = native limit disabled); `setAdapter(enabled:) throws`; `setLED(LEDState) throws`; `setPreventSleep(Bool)`. Throws `HardwareError` (`.notPrivileged`, `.keyMissing`, `.frameworkUnavailable`, `.io(code)`). | Protocol. Two adapters: `MacHardware` (in energd) and `FakeHardware` (tests). Dependency category: true external → mock. | Hides SMC struct layout and the read lag, PowerUI dlopen and objc_msgSend, and IOKit registry parsing. Internal seams: `SMCClient`, `PowerUIClient`, `BatteryReader`. | `FakeHardware` in unit tests. `MacHardware` only via the on-device `scripts/smoke.sh`. |
-| **Protocol** (`EnerGCore`) | Codable `Request` ∈ `getStatus`, `setLimit(Int)`, `discharge(to: Int)`, `cancelDischarge`, `topUp`, `setLEDMode(LEDMode)`, `setAutoDischarge(Bool)`, `setPaused(Bool)`, `release`. Every request is answered with `Status` (state, percent, limit, settings, power flows, warnings). | The XPC contract between EnerG.app and energd. | Shallow on purpose: it is a data contract with one reply shape. | Codable round-trip tests. |
+| **Protocol** (`EnerGCore`) | Codable `Request` ∈ `getStatus`, `setLimit(Int)`, `discharge(to: Int)`, `cancelDischarge`, `topUp`, `cancelTopUp`, `setLEDMode(LEDMode)`, `setAutoDischarge(Bool)`, `setPaused(Bool)`, `release`. Every request is answered with `Status` (state, percent, limit, settings, power flows, warnings). | The XPC contract between EnerG.app and energd. | Shallow on purpose: it is a data contract with one reply shape. | Codable round-trip tests. |
 | **energd** (daemon target) | launchd mach service `app.energ.energd` (app bundle ID `app.energ.EnerG`), registered with `SMAppService.daemon`, KeepAlive. Composition root: <br>• `XPCListener` with a peer code-signing requirement (same Team ID) <br>• IOPS power notifications, `IORegisterForSystemPower` (sleep/wake), clamshell state → `engine.handle` <br>• a 30 s tick while a Discharge or Top Up is active <br>• settings JSON at `/Library/Application Support/EnerG/settings.json` | Leaf. | Thin: wiring only. Deletion test: removing it pushes no logic anywhere, because the logic lives in the Engine. | Manual / smoke. |
 | **EnerG.app** (UI target) | SwiftUI `MenuBarExtra` popover; `DaemonClient` (async `send(Request) -> Status`, polls every 2 s only while the popover is open); `HelperInstaller` (register, approval prompt, unregister; launch at login via `SMAppService.mainApp`); AlDente detection. | Leaf. | Thin: rendering and the install flow. | SwiftUI previews with a stubbed `Status`. |
 
@@ -97,13 +97,19 @@ graph LR
 
 ### Popover UI
 
-- **Header:** battery %, state (Charging / At limit / Discharging / Top Up / Paused / On battery), warnings.
-- **Charge Limit picker:** 80, 85, 90, 95, 100.
-- **Discharge:** "Discharge to [target %]" button (target defaults to the limit), Cancel, and an Auto-Discharge toggle.
-- **Top Up** button.
-- **LED Mode:** Auto / Off / Blink.
-- **Power section:** adapter watts, source (AC/Battery), system draw in W, battery in/out in W, ⚠️ Weak Adapter.
-- **Toggles and actions:** Pause toggle, launch-at-login toggle, "Uninstall helper…", Quit.
+Control Center–style tiles. The layout was chosen with a throwaway SwiftUI prototype on 2026-10-20: the variant "C — Control Center tiles", with the adjustments below. From top to bottom, 340 pt wide:
+
+1. **Battery tile:** large %, state label, and a Charge Limit slider that snaps to 80/85/90/95/100. The limit is sent once, when the drag ends.
+2. **Notice tiles:** Weak Adapter, unavailable features, battery unreadable, AlDente running, and helper errors. These sit **between** the Charge Limit and the controls. When the helper is not installed or needs approval, only a helper tile (Install / Open Login Items) and the footer are shown.
+3. **Control grid:** 2 × 3 toggle tiles. A tile is highlighted when on, and every click toggles it.
+   - **Discharge:** when idle, a click opens a popover with a target slider (5–100, step 5, default = limit) and Start. While running, the tile shows "To X% · click to stop" and a click cancels. No inline cancel area.
+   - **Auto-Discharge:** on/off.
+   - **Top Up:** a click starts it; while running, a click stops it (`cancelTopUp`).
+   - **Pause:** on/off.
+   - **MagSafe LED:** a click cycles Auto → Off → Blink while discharging.
+   - **Launch at Login:** on/off.
+4. **Power-flow tile:** Adapter (W / "Cut by EnerG" / "Unplugged") → Mac (system W) ↔ Battery (±W). The arrows dim when no power flows.
+5. **Footer:** Uninstall Helper, Quit EnerG.
 
 ### Error handling
 
