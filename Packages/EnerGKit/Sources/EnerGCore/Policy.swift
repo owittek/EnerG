@@ -1,7 +1,12 @@
 /// Runtime state the Engine keeps between events (not persisted).
 struct Session: Equatable {
     /// Set while a Discharge runs.
-    var dischargeTarget: Int?
+    var dischargeTarget: Int? {
+        didSet { if oldValue != nil, dischargeTarget == nil { dischargeJustEnded = true } }
+    }
+    /// A Discharge ended and no tick has run since. That tick's battery current still reflects the cut,
+    /// so it doesn't count as a Weak Adapter sample.
+    var dischargeJustEnded = false
     var toppingUp = false
     /// Blocks Auto-Discharge after the user cancels one; cleared on unplug or at/below the limit.
     var autoSuppressed = false
@@ -33,8 +38,8 @@ enum Policy {
 
     /// Advances the session for a fresh snapshot: ends a Discharge, Top Up and suppression on unplug,
     /// ends a finished Discharge, starts Auto-Discharge, and tracks Weak Adapter samples.
-    /// `countsWeakSample`: only periodic readings (tick, power change) count towards a Weak Adapter;
-    /// other events can only reset the count.
+    /// `countsWeakSample`: only ticks count towards a Weak Adapter, except the first tick after a Discharge
+    /// ends; other events can only reset the count.
     static func update(settings: Settings, snapshot: BatterySnapshot, countsWeakSample: Bool, session s: inout Session) {
         if isPaused(settings, s) {
             s.dischargeTarget = nil
@@ -64,9 +69,10 @@ enum Policy {
         let weak = s.dischargeTarget == nil && snapshot.adapterConnected && snapshot.batteryWatts < 0
         if !weak {
             s.weakSamples = 0
-        } else if countsWeakSample {
+        } else if countsWeakSample, !s.dischargeJustEnded {
             s.weakSamples += 1
         }
+        if countsWeakSample { s.dischargeJustEnded = false }
     }
 
     /// Derives the desired hardware state; no side effects.

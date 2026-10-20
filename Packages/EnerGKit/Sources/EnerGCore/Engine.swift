@@ -58,7 +58,7 @@ public final class Engine {
         case .command(let request):
             perform(request)
         }
-        evaluate(countsWeakSample: event == .tick || event == .powerChanged)
+        evaluate(countsWeakSample: event == .tick)
         wakeReassert = false
         return status()
     }

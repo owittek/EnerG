@@ -70,14 +70,45 @@ struct TopUpAndWarningsTests {
         #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
     }
 
-    @Test func weakAdapterCountsOnlyTicksAndPowerChanges() {
+    @Test func weakAdapterCountsOnlyTicks() {
         let (engine, hw) = started()
         hw.snap.batteryWatts = -5
         engine.handle(.tick)
         #expect(!engine.handle(.command(.getStatus)).warnings.contains(.weakAdapter))
         #expect(!engine.handle(.lid(closed: false)).warnings.contains(.weakAdapter))
         #expect(!engine.handle(.didWake).warnings.contains(.weakAdapter))
-        #expect(engine.handle(.powerChanged).warnings.contains(.weakAdapter))
+        #expect(!engine.handle(.powerChanged).warnings.contains(.weakAdapter))
+        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
+    }
+
+    @Test func noWeakAdapterBlipAfterCancelledDischarge() {
+        let (engine, hw) = DischargeTests().dischargingAt92()
+        hw.snap.batteryWatts = -5   // battery current still reflects the cut
+        engine.handle(.command(.cancelDischarge))
+        #expect(!engine.handle(.powerChanged).warnings.contains(.weakAdapter))
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // first tick after the Discharge: skipped
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // 1 sample
+        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))    // 2 samples: a real Weak Adapter
+    }
+
+    @Test func tickThatEndsDischargeDoesNotCountWeakSample() {
+        let (engine, hw) = DischargeTests().dischargingAt92()
+        hw.snap.percent = 80
+        hw.snap.batteryWatts = -15
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // ends the Discharge: not counted
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // 1 sample
+        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
+    }
+
+    @Test func interleavedChargingSampleResetsWeakCount() {
+        let (engine, hw) = started()
+        hw.snap.batteryWatts = -5
+        engine.handle(.tick)
+        hw.snap.batteryWatts = 3
+        engine.handle(.tick)
+        hw.snap.batteryWatts = -5
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
+        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
     }
 
     @Test func noWeakAdapterWarningWhileDischarging() {
