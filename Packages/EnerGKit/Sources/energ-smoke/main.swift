@@ -16,7 +16,8 @@ do {
     case ("get-limit", _):
         var limit: UInt8 = 0
         var enabled = false
-        guard powerui_get_limit(&limit, &enabled) == 0 else { throw HardwareError.frameworkUnavailable }
+        let rc = powerui_get_limit(&limit, &enabled)
+        guard rc == 0 else { throw rc == -1 ? HardwareError.frameworkUnavailable : HardwareError.io(rc) }
         print(enabled ? "\(limit)" : "off")
     case ("adapter", "on"):
         try hw.setAdapter(enabled: true)
@@ -28,7 +29,7 @@ do {
     case ("limit", "off"):
         try hw.setChargeLimit(nil)
     case ("limit", _):
-        guard let limit = Int(argument) else { print(usage); exit(2) }
+        guard let limit = Int(argument), (0...100).contains(limit) else { print(usage); exit(2) }
         try hw.setChargeLimit(limit)
     default:
         print(usage)
