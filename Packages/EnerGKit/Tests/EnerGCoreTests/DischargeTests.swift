@@ -191,6 +191,29 @@ struct DischargeTests {
         #expect(hw.writes == [.adapter(true), .limit(nil), .led(.green), .preventSleep(false)])
     }
 
+    @Test func failedReapplyLeavesLimitOffAndRetries() {
+        let (engine, hw) = dischargingAt92()
+        hw.failingLimits = [80]
+        let status = engine.handle(.command(.cancelDischarge))
+        #expect(hw.writes == [.adapter(true), .limit(nil), .led(.green), .preventSleep(false)])
+        #expect(!status.warnings.contains(.unavailable(.chargeLimit)))
+
+        hw.failingLimits = []
+        hw.writes.removeAll()
+        engine.handle(.tick)
+        #expect(hw.writes == [.limit(80)])
+    }
+
+    @Test func reapplyFailingAgainLatchesChargeLimit() {
+        let (engine, hw) = dischargingAt92()
+        hw.failingLimits = [80]
+        engine.handle(.command(.cancelDischarge))
+        hw.writes.removeAll()
+        let status = engine.handle(.tick)
+        #expect(hw.writes.isEmpty)
+        #expect(status.warnings.contains(.unavailable(.chargeLimit)))
+    }
+
     @Test func startClearsAStaleDischarge() {
         let (engine, hw) = started()   // 70 %
         engine.handle(.command(.discharge(to: 50)))

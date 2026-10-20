@@ -143,10 +143,13 @@ public final class Engine {
                 }
             }
         }
+        var limitLeftOff = false
         if reapplyLimit {
             write(.chargeLimit) {
                 try hardware.setChargeLimit(nil)
-                try hardware.setChargeLimit(next.chargeLimit)
+                // Disabled but not set again: record it as off so the next evaluate sets it the normal way,
+                // which latches unavailable only if that fails too.
+                do { try hardware.setChargeLimit(next.chargeLimit) } catch { limitLeftOff = true }
             }
         } else if changed(\.chargeLimit, to: next) {
             write(.chargeLimit) { try hardware.setChargeLimit(next.chargeLimit) }
@@ -154,6 +157,7 @@ public final class Engine {
         if changed(\.led, to: next) { write(.led) { try hardware.setLED(next.led) } }
         if changed(\.preventSleep, to: next) { hardware.setPreventSleep(next.preventSleep) }
         applied = next
+        if limitLeftOff { applied?.chargeLimit = nil }
         // Re-enable failed: record the adapter as still off so the next evaluate retries.
         if enableFailed { applied?.adapterEnabled = false }
         if wakeReassertFailed {

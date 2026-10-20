@@ -10,6 +10,8 @@ final class FakeHardware: Hardware {
                                adapterWatts: 96, batteryWatts: 20, systemWatts: 15)
     var writes: [Write] = []
     var failing: Set<Feature> = []
+    /// Non-nil limits whose write throws; disabling the limit still succeeds.
+    var failingLimits: Set<Int> = []
     var snapshotFails = false
 
     func snapshot() throws -> BatterySnapshot {
@@ -19,6 +21,7 @@ final class FakeHardware: Hardware {
 
     func setChargeLimit(_ percent: Int?) throws {
         if failing.contains(.chargeLimit) { throw HardwareError.notPrivileged }
+        if let percent, failingLimits.contains(percent) { throw HardwareError.io(-2) }
         writes.append(.limit(percent))
     }
 
