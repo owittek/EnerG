@@ -318,7 +318,8 @@ extension Status {
             return effectiveLimit.map { "Draining to \($0)%" } ?? state.label
         case .atLimit:
             guard let limit = effectiveLimit, let percent = snapshot?.percent else { return "Not charging" }
-            return percent >= limit ? "Holding at \(limit)%" : "Not charging · resumes below \(limit - 5)%"
+            if percent >= limit { return "Holding at \(limit)%" }
+            return percent >= limit - 5 ? "Not charging · resumes below \(limit - 5)%" : "Not charging"
         default:
             return state.label
         }
