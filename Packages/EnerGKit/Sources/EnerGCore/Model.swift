@@ -86,7 +86,7 @@ public enum Feature: String, Codable, Sendable, CaseIterable {
 }
 
 public enum ChargeState: String, Codable, Sendable {
-    case charging, atLimit, toppingUp, paused, onBattery, unknown
+    case charging, atLimit, limitDrain, toppingUp, paused, onBattery, unknown
 }
 
 public enum Warning: Codable, Hashable, Sendable {

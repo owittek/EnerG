@@ -28,14 +28,17 @@ enum Policy {
     }
 
     /// Advances the session for a fresh snapshot: ends a Top Up on unplug and tracks Weak Adapter samples.
+    /// `effectiveLimit`: above it the battery is in a Limit Drain, which is no Weak Adapter.
     /// `countsWeakSample`: only ticks count towards a Weak Adapter; other events can only reset the count.
-    static func update(settings: Settings, snapshot: BatterySnapshot, countsWeakSample: Bool, session s: inout Session) {
+    static func update(settings: Settings, snapshot: BatterySnapshot, effectiveLimit: Int?, countsWeakSample: Bool, session s: inout Session) {
         if isPaused(settings, s) {
             clearForPause(&s)
             return
         }
         if !snapshot.adapterConnected { s.toppingUp = false }
-        let weak = snapshot.adapterConnected && snapshot.batteryWatts < 0
+        // Charging is expected at or below the limit in effect; above it macOS drains to it on purpose.
+        let chargingExpected = effectiveLimit.map { snapshot.percent <= $0 } ?? true
+        let weak = snapshot.adapterConnected && chargingExpected && snapshot.batteryWatts < 0
         if !weak {
             s.weakSamples = 0
         } else if countsWeakSample {

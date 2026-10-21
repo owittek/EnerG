@@ -55,4 +55,60 @@ struct LimitTests {
         #expect(engine.handle(.command(.cancelTopUp)).effectiveLimit == 80)
         #expect(engine.handle(.command(.setPaused(true))).effectiveLimit == nil)
     }
+
+    // Above the limit macOS runs the Mac from the battery itself; that is no Weak Adapter.
+    @Test func aboveTheLimitIsLimitDrainNotWeakAdapter() {
+        let (engine, hw) = started()
+        hw.snap.percent = 83
+        hw.snap.isCharging = false
+        hw.snap.batteryWatts = -11
+        var status = engine.handle(.tick)
+        #expect(status.state == .limitDrain)
+        #expect(hw.writes == [.led(.green)])
+        status = engine.handle(.tick)
+        #expect(!status.warnings.contains(.weakAdapter))
+    }
+
+    @Test func weakAdapterAtTheLimitCounts() {
+        let (engine, hw) = started()
+        hw.snap.percent = 80
+        hw.snap.isCharging = false
+        hw.snap.batteryWatts = -5
+        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
+        let status = engine.handle(.tick)
+        #expect(status.warnings.contains(.weakAdapter))
+        #expect(status.state == .atLimit)
+    }
+
+    @Test func weakAdapterCountsAtAnyPercentWithoutALimit() {
+        let (engine, hw) = started(Settings(chargeLimit: 100))
+        hw.snap.percent = 92
+        hw.snap.batteryWatts = -5
+        engine.handle(.tick)
+        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
+    }
+
+    @Test func limitDrainFollowsTheEffectiveLimit() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        engine.handle(.command(.setLimit(60)))   // falls back: 80 in effect
+        hw.snap.percent = 70
+        hw.snap.isCharging = false
+        #expect(engine.handle(.tick).state == .atLimit)
+
+        let (engine2, hw2) = started()
+        engine2.handle(.command(.setLimit(60)))
+        hw2.snap.percent = 70
+        hw2.snap.isCharging = false
+        #expect(engine2.handle(.tick).state == .limitDrain)
+    }
+
+    @Test func noLimitDrainWhileToppingUpOrUnplugged() {
+        let (engine, hw) = started()
+        hw.snap.percent = 85
+        #expect(engine.handle(.command(.topUp)).state == .toppingUp)
+        engine.handle(.command(.cancelTopUp))
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        #expect(engine.handle(.powerChanged).state == .onBattery)
+    }
 }

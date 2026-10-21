@@ -307,6 +307,7 @@ extension ChargeState {
         switch self {
         case .charging: "Charging"
         case .atLimit: "Holding at limit"
+        case .limitDrain: "Draining to limit"
         case .toppingUp: "Topping up to 100%"
         case .paused: "Paused"
         case .onBattery: "On battery"

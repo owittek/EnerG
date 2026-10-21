@@ -91,7 +91,7 @@ public final class Engine {
             return
         }
         let current = snapshot!
-        Policy.update(settings: settings, snapshot: current, countsWeakSample: countsWeakSample, session: &session)
+        Policy.update(settings: settings, snapshot: current, effectiveLimit: effectiveLimit, countsWeakSample: countsWeakSample, session: &session)
         apply(Policy.actuation(settings: settings, snapshot: current, session: session))
     }
 
@@ -152,6 +152,7 @@ public final class Engine {
         guard let snapshot else { return .unknown }
         if session.toppingUp { return .toppingUp }
         if !snapshot.adapterConnected { return .onBattery }
+        if let limit = effectiveLimit, snapshot.percent > limit { return .limitDrain }
         return snapshot.isCharging ? .charging : .atLimit
     }
 }
