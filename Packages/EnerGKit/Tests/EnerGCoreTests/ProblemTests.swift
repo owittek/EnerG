@@ -30,10 +30,12 @@ struct ProblemTests {
         #expect(!Problem.changeNotApplied.isPending)
     }
 
-    @Test func aFailureBeatsTheConnection() {
-        #expect(Problem.shown(failure: .launchAtLoginFailed, connection: .helperUnreachable) == .launchAtLoginFailed)
+    @Test func helperFailuresBeatTheConnectionWhichBeatsOtherFailures() {
         #expect(Problem.shown(failure: .changeNotApplied, connection: .helperUnreachable) == .changeNotApplied)
-        #expect(Problem.shown(failure: nil, connection: .waitingForHelper) == .waitingForHelper)
+        #expect(Problem.shown(failure: .releaseFailed, connection: .helperUnreachable) == .releaseFailed)
+        #expect(Problem.shown(failure: .launchAtLoginFailed, connection: .helperUnreachable) == .helperUnreachable)
+        #expect(Problem.shown(failure: .installFailed, connection: .waitingForHelper) == .waitingForHelper)
+        #expect(Problem.shown(failure: .launchAtLoginFailed, connection: nil) == .launchAtLoginFailed)
         #expect(Problem.shown(failure: nil, connection: nil) == nil)
     }
 }

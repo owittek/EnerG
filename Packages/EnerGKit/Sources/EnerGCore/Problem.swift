@@ -15,8 +15,12 @@ public enum Problem: Equatable, Sendable {
     /// Polls can't reach energd.
     case helperUnreachable
 
-    /// The one problem to show: a failed click or dropped change first, else the connection.
-    public static func shown(failure: Problem?, connection: Problem?) -> Problem? { failure ?? connection }
+    /// The one problem to show: a dropped change or failed release first (they are about the helper), then the
+    /// connection, then any other failed click.
+    public static func shown(failure: Problem?, connection: Problem?) -> Problem? {
+        if let failure, failure == .changeNotApplied || failure == .releaseFailed { return failure }
+        return connection ?? failure
+    }
 
     public var message: String {
         switch self {
@@ -35,7 +39,7 @@ public enum Problem: Equatable, Sendable {
         switch self {
         case .releaseFailed: .uninstallAnyway
         case .launchAtLoginFailed: .openLoginItems
-        default: nil
+        case .installFailed, .uninstallFailed, .changeNotApplied, .waitingForHelper, .helperUnreachable: nil
         }
     }
 
