@@ -3,7 +3,7 @@ import CPlatform
 import EnerGCore
 import EnerGMac
 
-let usage = "usage: energ-smoke status | get-limit | adapter on|off | led system|off|green|orange | limit <80-100>|off"
+let usage = "usage: energ-smoke status | get-limit | adapter on|off | led system|off|green|orange | limit <50-100>|off"
 let args = Array(CommandLine.arguments.dropFirst())
 let command = args.first ?? ""
 let argument = args.count > 1 ? args[1] : ""
@@ -18,7 +18,7 @@ do {
         var enabled = false
         let rc = powerui_get_limit(&limit, &enabled)
         guard rc == 0 else { throw rc == -1 ? HardwareError.frameworkUnavailable : HardwareError.io(rc) }
-        print(enabled ? "\(limit)" : "off")
+        print("\(enabled ? "\(limit)" : "off") CHLT=\(hw.smcLimit().map(String.init) ?? "off")")
     case ("adapter", "on"):
         try hw.setAdapter(enabled: true)
     case ("adapter", "off"):
@@ -27,10 +27,10 @@ do {
         guard let state = LEDState(rawValue: argument) else { print(usage); exit(2) }
         try hw.setLED(state)
     case ("limit", "off"):
-        _ = try hw.setChargeLimit(nil)
+        print(try hw.setChargeLimit(nil).map(String.init) ?? "off")
     case ("limit", _):
-        guard let limit = Int(argument), (0...100).contains(limit) else { print(usage); exit(2) }
-        _ = try hw.setChargeLimit(limit)
+        guard let limit = Int(argument), (50...100).contains(limit) else { print(usage); exit(2) }
+        print(try hw.setChargeLimit(limit).map(String.init) ?? "off")   // the limit now in effect
     default:
         print(usage)
         exit(2)

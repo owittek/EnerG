@@ -9,7 +9,7 @@ BIN=Packages/EnerGKit/.build/debug/energ-smoke
 [ -x "$BIN" ] || { echo "build energ-smoke first (see header)"; exit 1; }
 S() { "$BIN" "$@"; }
 
-ORIG=$(S get-limit)
+ORIG=$(S get-limit | cut -d' ' -f1)
 restore() {
   echo "== restore (limit $ORIG)"
   S adapter on
@@ -26,5 +26,6 @@ for led in off green orange system; do
   echo "== LED $led (watch MagSafe) 3s"; S led "$led"; sleep 3
 done
 echo "== limit 85 (expect 85)"; S limit 85; S get-limit
+echo "== limit 60 (expect 60; 80 means this macOS rejects the override)"; S limit 60; S get-limit
 echo "== limit off (expect off)"; S limit off; S get-limit
 echo "== done"

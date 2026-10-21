@@ -3,13 +3,17 @@ import IOKit
 import CPlatform
 import EnerGCore
 import OSLog
+import notify
 
 /// The real Mac: AppleSMC (CHIE adapter pulse, ACLC LED, PSTR system power, AC-W plug presence, B0AC/B0AV battery power), PowerUI native
 /// Charge Limit, and the AppleSmartBattery registry entry. Writes need root.
+/// The native Charge Limit goes through `NativeLimit`, with this class as its `LimitControls`.
 /// SMC reads straight after a write can return the old value; the Engine never reads back, so this is harmless.
-public final class MacHardware: Hardware {
+public final class MacHardware: Hardware, LimitControls {
     private let smc: io_connect_t
     private let log = Logger(subsystem: "app.energ", category: "hardware")
+    /// Holds `self` as its controls; MacHardware lives for the whole process, so the cycle is harmless.
+    private lazy var nativeLimit = NativeLimit(controls: self)
 
     public init() throws {
         var conn: io_connect_t = 0
@@ -42,14 +46,57 @@ public final class MacHardware: Hardware {
     }
 
     public func setChargeLimit(_ percent: Int?) throws -> Int? {
+        try nativeLimit.set(percent)
+    }
+
+    /// Turns `CHIE` back on if a crash mid-pulse (or an older build's Discharge) left the adapter cut; the next
+    /// `setChargeLimit` then re-applies the limit so macOS doesn't stay on battery. energd calls it once before `.start`.
+    public func recoverAdapter() {
+        guard let chie = try? read("CHIE", size: 1), chie[0] != 0x00 else { return }
+        do { try setAdapter(enabled: true) } catch {
+            log.error("adapter re-enable at start failed: \(String(describing: error), privacy: .public)")
+        }
+        nativeLimit.adapterWasCut()
+    }
+
+    // MARK: - LimitControls
+
+    public func setMCL(_ percent: Int?) throws {
         if let percent {
-            // enableMCL: resets the limit to 80; setMCLLimit: also enables
+            // enableMCL: resets the limit to 80; setMCLLimit: also enables. Accepts 80...100 only.
             try check(powerui_set_limit(UInt8(percent)))
         } else {
             try check(powerui_set_enabled(false))
         }
-        return percent
     }
+
+    /// A String, not a CFString: a static CF value isn't concurrency-safe under Swift 6.
+    private static let smartChargingDomain = "com.apple.smartcharging.topoffprotection"
+
+    public func writeOverride(_ percent: Int) throws {
+        // energd runs as root, so this is root's domain, the one the smartcharging daemon reads.
+        let domain = Self.smartChargingDomain as CFString
+        CFPreferencesSetValue("mclLimitValue" as CFString, NSNumber(value: percent), domain,
+                              kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        guard CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) else {
+            throw HardwareError.io(-3)
+        }
+    }
+
+    public func notifyDefaultsChanged() {
+        notify_post("com.apple.smartcharging.defaultschanged")
+    }
+
+    /// `CHLT` = `[limit, band, status]`; byte 0 is the limit the firmware enforces, 0 when off.
+    public func smcLimit() -> Int? {
+        guard let bytes = try? read("CHLT", size: 3), bytes[0] != 0 else { return nil }
+        return Int(bytes[0])
+    }
+
+    /// Unknown counts as plugged in: a pulse with nothing plugged in is harmless.
+    public func pluggedIn() -> Bool { physicallyPlugged() ?? true }
+
+    public func wait(_ seconds: TimeInterval) { Thread.sleep(forTimeInterval: seconds) }
 
     public func setAdapter(enabled: Bool) throws {
         try write("CHIE", enabled ? 0x00 : 0x08)

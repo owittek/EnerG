@@ -56,6 +56,7 @@ func makeListener() -> XPCListener {
 }
 let listener = makeListener()
 
+hardware.recoverAdapter()
 host.handle(.start)
 
 let events = SystemEvents(host: host)
