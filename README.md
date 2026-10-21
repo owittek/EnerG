@@ -37,13 +37,23 @@ On first launch, click **Install Helper** and allow EnerG under System Settings 
 
 ## Test
 
+Policy tests, no hardware:
+
 ```sh
-swift test --package-path Packages/EnerGKit                       # policy tests, no hardware
-swift build --package-path Packages/EnerGKit --product energ-smoke
-sudo scripts/smoke.sh                                             # on-device hardware check, restores state on exit
+swift test --package-path Packages/EnerGKit
 ```
 
-Quit AlDente first.
+The smoke test checks the real hardware: it cuts the adapter, cycles the MagSafe LED and changes the Charge Limit, then restores the original state on exit. Before running it:
+
+- Quit AlDente. It writes the same SMC keys and would override the test's writes.
+- If the EnerG helper is installed, suspend it, or it turns the adapter back on mid-test.
+
+```sh
+swift build --package-path Packages/EnerGKit --product energ-smoke
+sudo launchctl kill SIGSTOP system/app.energ.energd   # only if the helper is installed
+sudo scripts/smoke.sh                                 # watch the MagSafe LED
+sudo launchctl kill SIGCONT system/app.energ.energd   # resume the helper
+```
 
 ## Logs
 
