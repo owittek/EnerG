@@ -29,8 +29,8 @@ restore() {
 trap restore EXIT
 
 echo "== baseline (limit $ORIG)"; S status
-echo "== adapter off 6s (expect adapterConnected: false, batteryWatts < 0)"; S adapter off; sleep 6; S status
-echo "== adapter on 4s (expect adapterConnected: true)"; S adapter on; sleep 4; S status
+echo "== adapter off 6s (expect batteryWatts < 0; adapterConnected stays true when plugSensed, false otherwise)"; S adapter off; sleep 6; S status
+echo "== adapter on 4s (expect adapterConnected: true, batteryWatts back up)"; S adapter on; sleep 4; S status
 for led in off green orange system; do
   echo "== LED $led (watch MagSafe) 3s"; S led "$led"; sleep 3
 done
