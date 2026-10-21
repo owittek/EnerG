@@ -9,7 +9,7 @@ final class AppModel {
     /// What the popover shows: the predicted status while a change settles, else the last reply. nil before the first.
     private(set) var status: Status?
     /// A change couldn't reach the helper and is being retried.
-    private(set) var waitingForHelper = false
+    private var waitingForHelper = false
     var helper: SMAppService.Status = HelperInstaller.status
     /// The one problem the popover shows, if anything is wrong.
     var problem: Problem? {
@@ -23,7 +23,7 @@ final class AppModel {
     /// A failed click or a dropped change; cleared when the user starts any action. A dropped change also clears once
     /// energd answers again.
     private var failure: Problem?
-    /// Polls can't reach energd; cleared by an applied reply.
+    /// Polls can't reach energd; cleared by an applied reply, or when the helper isn't enabled or is unregistered.
     private var unreachable = false
     private let client = DaemonClient()
     private var reconciler = Reconciler()
@@ -87,12 +87,21 @@ final class AppModel {
             if reconciler.received(new, for: token, now: .now) { reached() }
         } catch {
             if reconciler.failed(token, now: .now) != .stale {
+                // Log once per outage, not on every failed poll.
+                if !unreachable {
+                    log.error("status poll failed: \(String(describing: error), privacy: .public)")
+                }
                 unreachable = true
-                log.error("status poll failed: \(String(describing: error), privacy: .public)")
             }
         }
         publish()
         pump()
+    }
+
+    /// The Retry button: an action like any click, so it clears a failure before polling again.
+    func retry() async {
+        failure = nil
+        await refresh()
     }
 
     /// A user click: shows the result at once and queues the request; the latest click on a control wins.

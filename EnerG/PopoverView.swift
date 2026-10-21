@@ -17,7 +17,7 @@ struct PopoverView: View {
                 PowerFlowTile(status: status)
             } else if model.problem != nil {
                 ProblemTile(model: model)
-                Button("Retry") { Task { await model.refresh() } }
+                Button("Retry") { Task { await model.retry() } }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 120)
             }
