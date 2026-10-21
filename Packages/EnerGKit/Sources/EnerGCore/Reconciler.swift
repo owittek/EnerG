@@ -1,5 +1,6 @@
 /// The popover's side of the controls. Clicks change what the user wants at once; requests to energd go out one at a
-/// time, polls included, and the latest click on a control wins. Use from one actor; time is passed in.
+/// time, polls included, and the latest click on a control wins. While a change settles, `displayed` shows the status
+/// predicted for it instead of a reply that may still be stale. Use from one actor; time is passed in.
 public struct Reconciler {
     /// One request sent to energd. Pass it back with its reply or failure.
     public struct Token: Equatable, Sendable {
@@ -19,6 +20,9 @@ public struct Reconciler {
     /// How long failed changes are retried, from the first failure in a row, before they are dropped.
     public static let retryWindow: Duration = .seconds(10)
 
+    /// How long the prediction stays once nothing is left to send, if no confirmed status agrees with it first.
+    public static let settleCap: Duration = .seconds(6)
+
     /// Declared in send order.
     private enum Field: CaseIterable { case paused, limit, topUp, led }
 
@@ -36,6 +40,13 @@ public struct Reconciler {
         let sent: (field: Field, request: Request)?
     }
 
+    private struct Settle {
+        /// The confirmed status at the first click; the band prediction keeps its charging state.
+        let baseline: Status
+        /// When nothing was left to send; nil while something is.
+        var drainedAt: ContinuousClock.Instant? = nil
+    }
+
     private var confirmed: Status?
     private var wants = Wants()
     private var inFlight: InFlight?
@@ -43,13 +54,17 @@ public struct Reconciler {
     private var seq = 0
     /// Tokens up to this one are from before the last `reset`.
     private var resetSeq = 0
+    private var settle: Settle?
+    /// Shown from `closed` until a poll sent after it answers.
+    private var frozen: Status?
+    private var closedSeq = 0
 
     public init() {}
 
     /// A click: `setPaused`, `setLimit`, `topUp`, `cancelTopUp` or `setLEDMode`; other requests are ignored, as is a
     /// click before the first status arrives. Pause also drops a wanted Top Up, as energd clears it.
     public mutating func want(_ request: Request, now: ContinuousClock.Instant) {
-        guard confirmed != nil else { return }
+        guard let confirmed else { return }
         switch request {
         case .setPaused(let paused):
             wants.paused = paused
@@ -60,7 +75,9 @@ public struct Reconciler {
         case .setLEDMode(let mode): wants.led = mode
         case .getStatus, .release: return
         }
+        if settle.map({ expired($0, now) }) ?? true { settle = Settle(baseline: confirmed) }
         prune()
+        updateSettle(now)
     }
 
     /// The next change to send, or nil while a request is in flight or nothing differs from the confirmed status.
@@ -93,7 +110,9 @@ public struct Reconciler {
         firstFailure = nil
         // energd kept the old value for exactly what was sent (e.g. Top Up while unplugged): stop asking.
         if let sent = own?.sent, request(for: sent.field, status) == sent.request { clear(sent.field) }
+        if token.isPoll, token.seq > closedSeq { frozen = nil }
         prune()
+        updateSettle(now)
         return true
     }
 
@@ -111,12 +130,38 @@ public struct Reconciler {
         firstFailure = first
         guard first.duration(to: now) >= Self.retryWindow else { return .retry }
         wants = Wants()
+        settle = nil
         firstFailure = nil
         return .gaveUp
     }
 
     /// A failed change is still wanted and waiting to be retried.
     public var waitingForHelper: Bool { firstFailure != nil && hasPendingChange }
+
+    /// What the popover shows: the prediction while a change settles, else the confirmed status; from `closed` until
+    /// a poll sent after it answers, what was shown at `closed`. nil before the first status.
+    public func displayed(now: ContinuousClock.Instant) -> Status? {
+        if let frozen { return frozen }
+        guard let confirmed else { return nil }
+        guard let settle, !expired(settle, now) else { return confirmed }
+        return prediction(confirmed, settle)
+    }
+
+    /// A change is settling, so polls should come faster.
+    public func isSettling(now: ContinuousClock.Instant) -> Bool {
+        settle.map { !expired($0, now) } ?? false
+    }
+
+    /// When the prediction gives way to the confirmed status unless one agrees first; nil while something is left to
+    /// send or nothing is settling.
+    public var settleDeadline: ContinuousClock.Instant? { settle?.drainedAt.map { $0 + Self.settleCap } }
+
+    /// The popover closed: keep showing what it showed until a poll sent after this answers, since replies arriving
+    /// meanwhile may be stale.
+    public mutating func closed(now: ContinuousClock.Instant) {
+        frozen = displayed(now: now)
+        closedSeq = seq
+    }
 
     /// Forgets everything, e.g. after an uninstall; replies to earlier tokens are then stale.
     public mutating func reset() {
@@ -141,6 +186,45 @@ public struct Reconciler {
             clear(field)
         }
         if queueEmpty { firstFailure = nil }
+    }
+
+    private func expired(_ settle: Settle, _ now: ContinuousClock.Instant) -> Bool {
+        settle.drainedAt.map { $0.duration(to: now) >= Self.settleCap } ?? false
+    }
+
+    /// Notes when the queue emptied; ends the settle once nothing is left to send and the confirmed status agrees
+    /// with the prediction, or at the cap.
+    private mutating func updateSettle(_ now: ContinuousClock.Instant) {
+        guard var settle, let confirmed else { return }
+        guard queueEmpty else {
+            settle.drainedAt = nil
+            self.settle = settle
+            return
+        }
+        if settle.drainedAt == nil { settle.drainedAt = now }
+        let shown = prediction(confirmed, settle)
+        let agrees = shown.state == confirmed.state && shown.stateLabel == confirmed.stateLabel
+        self.settle = agrees || expired(settle, now) ? nil : settle
+    }
+
+    /// The confirmed status with the wanted settings applied. The charge state is re-derived only when Pause, the
+    /// Charge Limit or Top Up differ from the confirmed status or from the baseline; otherwise it stays as reported.
+    private func prediction(_ confirmed: Status, _ settle: Settle) -> Status {
+        var settings = confirmed.settings
+        settings.paused = wants.paused ?? (confirmed.state == .paused)
+        settings.chargeLimit = wants.limit ?? confirmed.settings.chargeLimit
+        settings.ledMode = wants.led ?? confirmed.settings.ledMode
+        let toppingUp = wants.topUp ?? confirmed.toppingUp
+        let wanted = (settings.paused, settings.chargeLimit, toppingUp)
+        let base = settle.baseline
+        if wanted == (confirmed.state == .paused, confirmed.settings.chargeLimit, confirmed.toppingUp),
+           wanted == (base.state == .paused, base.settings.chargeLimit, base.toppingUp) {
+            var shown = confirmed
+            shown.settings.ledMode = settings.ledMode
+            return shown
+        }
+        return confirmed.predicted(settings: settings, toppingUp: toppingUp,
+                                   chargingBefore: base.snapshot?.isCharging ?? false)
     }
 
     /// The request that moves `field` from `confirmed` to what is wanted; nil when nothing is wanted or they match.
