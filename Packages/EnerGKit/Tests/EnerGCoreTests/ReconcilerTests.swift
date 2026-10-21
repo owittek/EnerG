@@ -161,6 +161,23 @@ struct ReconcilerQueueTests {
         #expect(next == nil)
     }
 
+    @Test func aFailureAfterACancelBackClickWaitsForAPoll() {
+        var r = ready(reported(percent: 80))
+        r.want(.setPaused(true), now: at(0))
+        let (_, token) = r.nextCommand()!
+        r.want(.setPaused(false), now: at(0.1))
+        let outcome = r.failed(token, now: at(0))
+        #expect(outcome == .retry)
+        #expect(!r.waitingForHelper)
+        let next = r.nextCommand()?.0
+        #expect(next == nil)
+        let poll = r.beginPoll()
+        #expect(poll != nil)
+        r.received(reported(Settings(paused: true), percent: 80), for: poll!, now: at(1))
+        let resume = r.nextCommand()?.0
+        #expect(resume == .setPaused(false))
+    }
+
     @Test func aFailedPollIsNotRetriedHere() {
         var r = Reconciler()
         let poll = r.beginPoll()!

@@ -102,6 +102,11 @@ public struct Reconciler {
         guard token.seq > resetSeq, inFlight?.token == token else { return .stale }
         inFlight = nil
         guard !token.isPoll else { return .retry }
+        // A click since the send may have cancelled out the change: nothing to retry, the next poll decides.
+        guard hasPendingChange else {
+            firstFailure = nil
+            return .retry
+        }
         let first = firstFailure ?? now
         firstFailure = first
         guard first.duration(to: now) >= Self.retryWindow else { return .retry }
@@ -110,8 +115,8 @@ public struct Reconciler {
         return .gaveUp
     }
 
-    /// A change failed and is waiting to be retried.
-    public var waitingForHelper: Bool { firstFailure != nil }
+    /// A failed change is still wanted and waiting to be retried.
+    public var waitingForHelper: Bool { firstFailure != nil && hasPendingChange }
 
     /// Forgets everything, e.g. after an uninstall; replies to earlier tokens are then stale.
     public mutating func reset() {
