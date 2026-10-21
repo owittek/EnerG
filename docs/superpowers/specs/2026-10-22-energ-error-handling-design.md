@@ -14,7 +14,7 @@ Follow-up to `2026-10-21-energ-async-controls-design.md`, from the on-device che
 While the native limit is on, a `CHLT` status `00` with the battery at or above the limit (`percent >= CHLT[0]`) means not charging. A real top-off within the same displayed percent then reads "Holding at N%", and the MagSafe LED no longer flashes orange in that window. Other statuses and the fallbacks are unchanged.
 
 ### One problem at a time
-The popover shows at most one problem notice, chosen as: a failed click or dropped change first, else the connection (retrying a change, else polls failing). Raw errors go to the system log (`Logger`, subsystem `app.energ`, category `app`), never into the UI.
+The popover shows at most one problem notice, chosen as: a dropped change or failed release first (they are about the helper), then the connection (retrying a change, else polls failing), then any other failed click. Retry, like any click, clears a failure. Raw errors go to the system log (`Logger`, subsystem `app.energ`, category `app`), never into the UI.
 
 | Problem | Text (exact) | Button |
 |---|---|---|
@@ -33,7 +33,7 @@ The popover shows at most one problem notice, chosen as: a failed click or dropp
 
 | Module | Interface | Seam | Depth rationale | Test surface |
 |---|---|---|---|---|
-| `Problem` (EnerGCore, new `Problem.swift`) | `enum Problem { installFailed, releaseFailed, uninstallFailed, launchAtLoginFailed, changeNotApplied, waitingForHelper, helperUnreachable }`; `message`; `action: ProblemAction?` (`uninstallAnyway`, `openLoginItems`, each with `title`); `isPending`; `static func shown(failure:connection:) -> Problem?` | Pure values next to `Labels.swift` (copy lives in EnerGCore so it is unit-tested) | All copy, buttons and precedence behind one value; without it they spread back across `AppModel` and the view | `ProblemTests` |
+| `Problem` (EnerGCore, new `Problem.swift`) | `enum Problem { installFailed, releaseFailed, uninstallFailed, launchAtLoginFailed, changeNotApplied, waitingForHelper, helperUnreachable }`; `message`; `action: ProblemAction?` (`uninstallAnyway`, `openLoginItems`, each with `title`); `isPending`; `static func shown(failure:connection:) -> Problem?` (order: `changeNotApplied`/`releaseFailed`, connection, other failures) | Pure values next to `Labels.swift` (copy lives in EnerGCore so it is unit-tested) | All copy, buttons and precedence behind one value; without it they spread back across `AppModel` and the view | `ProblemTests` |
 | `AppModel` (changed) | Drops `daemonError`, `actionError`, `offersUninstallAnyway`; adds `problem: Problem?` (computed), `resolve(_ ProblemAction)`; private `failure`, `unreachable`, `fail(_:_:)` that logs and sets `failure` | Thin shell | Maps events onto `Problem`; builds no strings | Manual |
 | `PopoverView` (changed) | `ProblemTile` replaces `ErrorTiles` in the same three places; `NoticeTile` gains `busy` (spinner icon, secondary text); waiting caption removed | — | — | Manual |
 | `BatterySnapshot.isCharging` (EnerGCore, changed) | gains `percent:`; status `00` at or above `CHLT[0]` → false | Existing pure function | Fixes the false "charging" at its source for state, label and LED | `IsChargingTests` |
