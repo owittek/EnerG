@@ -32,13 +32,18 @@ extension Status {
         }
     }
 
-    /// The text under the adapter icon: its rating, plus "light work" for a Weak Adapter (also during a Limit
-    /// Drain) or "idle" during a Limit Drain, when macOS runs the Mac from the battery.
+    /// The text under the adapter icon: its rating, or its plug state when the rating is unknown.
     public var adapterLabel: String {
         guard let snapshot else { return "—" }
         guard snapshot.adapterConnected else { return "Unplugged" }
-        guard let watts = snapshot.adapterWatts else { return "Connected" }
-        if watts < Self.weakAdapterBelowWatts { return "\(watts) W · light work" }
-        return state == .limitDrain ? "\(watts) W · idle" : "\(watts) W"
+        return snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
+    }
+
+    /// The line under `adapterLabel`: "light work" for a Weak Adapter (also during a Limit Drain), "idle" during a
+    /// Limit Drain, when macOS runs the Mac from the battery; nil otherwise.
+    public var adapterNote: String? {
+        guard let snapshot, snapshot.adapterConnected, let watts = snapshot.adapterWatts else { return nil }
+        if watts < Self.weakAdapterBelowWatts { return "light work" }
+        return state == .limitDrain ? "idle" : nil
     }
 }

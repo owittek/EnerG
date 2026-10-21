@@ -11,15 +11,15 @@ The Weak Adapter warning flickers under a marginal load, and an alarm is the wro
 ## 1. Weak Adapter (information only)
 
 - **Weak Adapter** = an adapter rated below 50 W (`snapshot.adapterWatts < 50`). Ratings cluster at 20/30/35/45 W and at 61–140 W, so 45 W counts as weak.
-- The text under the popover's adapter icon, first match wins:
+- The text under the popover's adapter icon, first match wins. A note sits on its own smaller line below the rating, because "N W · light work" doesn't fit a third of the row (seen on device):
 
-  | Condition | Text |
-  |---|---|
-  | Adapter not connected | "Unplugged" |
-  | `adapterWatts` unknown | "Connected" |
-  | `adapterWatts < 50` | "N W · light work", also during a Limit Drain |
-  | State is `.limitDrain` | "N W · idle" |
-  | Otherwise | "N W" |
+  | Condition | Text | Note |
+  |---|---|---|
+  | Adapter not connected | "Unplugged" | — |
+  | `adapterWatts` unknown | "Connected" | — |
+  | `adapterWatts < 50` | "N W" | "light work", also during a Limit Drain |
+  | State is `.limitDrain` | "N W" | "idle" |
+  | Otherwise | "N W" | — |
 
 - When the charger can't cover the load, the battery tile already shows the battery supplying power (negative W). Nothing else warns.
 - Removed:
@@ -31,8 +31,8 @@ The Weak Adapter warning flickers under a marginal load, and an alarm is the wro
 
 ## 2. Testable labels
 
-- `ChargeState.label`, `Status.stateLabel` and a new `Status.adapterLabel` (the table above, with a `weakAdapterBelowWatts = 50` constant) move from `EnerG/PopoverView.swift` into EnerGCore.
-- `PowerFlowTile.adapterText` is replaced by `status.adapterLabel`.
+- `ChargeState.label`, `Status.stateLabel` and new `Status.adapterLabel` and `Status.adapterNote` (the table above, with a `weakAdapterBelowWatts = 50` constant) move from `EnerG/PopoverView.swift` into EnerGCore.
+- `PowerFlowTile.adapterText` is replaced by `status.adapterLabel` with `status.adapterNote` on a second line.
 - The two `extension Status` blocks left in the app are merged.
 - The new tests cover every row of the adapter table, plus `stateLabel` for a Limit Drain, holding, the firmware band, and below the band.
 
@@ -94,8 +94,8 @@ The Weak Adapter warning flickers under a marginal load, and an alarm is the wro
 
 With energd on this build and AlDente off:
 
-- (a) 30 W charger at the limit: the adapter row shows "30 W · light work", and keeps it during a Limit Drain (set a limit below the current %).
-- (b) 140 W charger: "140 W" while holding, "140 W · idle" during a Limit Drain.
+- (a) 30 W charger at the limit: the adapter row shows "30 W" with "light work" below, and keeps it during a Limit Drain (set a limit below the current %).
+- (b) 140 W charger: "140 W" while holding, "140 W" with "idle" below during a Limit Drain.
 - (c) Lower the limit while charging: the popover shows "Charging" until macOS stops, then "Draining to N %".
 - (d) Set a limit below 80 while unplugged, then plug in: `get-limit` shows `CHLT` = the limit, and there's no `lowLimitUnsupported`.
 - (e) `scripts/smoke.sh` with energd suspended (SIGSTOP): `adapter off` sticks, and the restore leaves the original limit.
