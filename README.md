@@ -44,6 +44,7 @@ Quit AlDente first; its helper writes the same SMC keys.
 - Your settings stay in `/Library/Application Support/EnerG/settings.json`, so a reinstall restores them. Delete that file for a clean slate.
 - If the helper can't be reached, the notice offers **Uninstall Anyway**. It removes the helper without handing charging back first. If the helper is still running, it hands the LED back as it stops; if not, they may stay as last set. The native macOS Charge Limit may stay at its last value.
 - Switching EnerG off in System Settings → General → Login Items stops `energd` the same way: the LED is handed back, and the native macOS Charge Limit stays at its last value.
+- A limit below 80% may stay in effect after EnerG stops (Login Items off, or Uninstall Anyway). Turning the Charge Limit off in System Settings → Battery clears it.
 
 ## License
 

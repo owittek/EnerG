@@ -62,14 +62,14 @@ Dependency categories:
 `set(n)`:
 - **n ≥ 80**: `setMCL(n)` and return n. If the current value is below 80, PowerUI overwrites it, which is fine.
 - **n < 80**:
-  1. If `smcLimit() == n`, return n (wake or start with the value already in place: no writes, no pulse).
-  2. `setMCL(80)`, then `writeOverride(n)`, then `notifyDefaultsChanged()`.
+  1. If `smcLimit() == n`, return n (wake or start with the value already in place: no writes, no pulse). Skipped when re-applying after `adapterWasCut()`, since a `CHLT` read straight after a write can be stale.
+  2. `setMCL(80)` only when the native limit is off (`smcLimit()` nil) or when re-applying. Then `writeOverride(n)` (if it throws: fallback), then `notifyDefaultsChanged()`.
   3. Poll `smcLimit()` for up to ~2 s.
-  4. If it isn't n: when `pluggedIn()`, pulse (`setAdapter(false)`, `wait(1)`, `setAdapter(true)`, always re-enabled via `defer`), then poll ~2 s again. When not plugged in, return n unverified: the plug-in event applies it.
+  4. If it isn't n: when not plugged in, return n unverified: the plug-in event applies it. Otherwise pulse: `setAdapter(false)`, `wait(1)`, `setAdapter(true)`, then poll ~2 s again. A failed cut falls back (the adapter was never cut). A failed re-enable is retried up to 3 times, 0.5 s apart; if all fail, `set` throws (Charge Limit unavailable) and MacHardware's snapshot turns the adapter back on at the next event.
   5. Still not n: `setMCL(80)` and return 80 (fallback).
 - **nil**: if `smcLimit()` is below 80, call `setMCL(80)` first, so Apple's domain holds a value System Settings can show. Then `setMCL(nil)` (`disableMCL`).
 - **Stuck recovery** after a pulse above the new limit: decided by the Task 1 spike. If the spike shows "Battery Power" stuck, NativeLimit runs disable → `setMCL(80)` → override → notify before polling again.
-- **`adapterWasCut()`**: `MacHardware.init` reads `CHIE`. If it isn't `00` (a crash mid-pulse, or an upgrade from a build that was mid-Discharge), it writes `00` and calls this. The next `set` then starts with disable → set, the old unstick. The Engine's `.start` writes the limit unconditionally (`applied = nil`), so that next `set` always happens.
+- **`adapterWasCut()`**: `MacHardware.snapshot()` reads `CHIE` on every Engine event, `.start` included (energ-smoke opts out, so its `adapter off` sticks). If it isn't `00` (a pulse whose re-enable failed, a crash mid-pulse, or an upgrade from a build that was mid-Discharge), it writes `00` and calls this. The snapshot runs on the Engine's serial context, so never mid-pulse. The next `set` then starts with disable → set, the old unstick. The Engine's `.start` writes the limit unconditionally (`applied = nil`), so after a restart that next `set` always happens; mid-run, the adapter is back on at once and the unstick waits for the next `set`.
 - A limit change can block energd for up to ~5 s. That only happens when the % is steady and a pulse is needed.
 
 ### Engine / Policy
@@ -110,7 +110,7 @@ Dependency categories:
 - **Discharge and Auto-Discharge tiles** are removed, along with `DischargePopover`, `AppModel.dischargeTarget` and `defaultDischargeTarget`.
 - **State line** uses `effectiveLimit` (call it L):
   - `.limitDrain`: "Draining to L %".
-  - Plugged in and not charging: "Holding at L %" when % ≥ L; otherwise "Not charging · resumes below (L − 5) %".
+  - Plugged in and not charging: "Holding at L %" when % ≥ L; "Not charging · resumes below (L − 5) %" when L − 5 ≤ % < L; otherwise "Not charging".
   - The other states are unchanged.
 - **Adapter row** during `.limitDrain`: "70 W · idle".
 - **Limit Drain caption**, one line: "macOS runs the Mac from the battery until it's back at the limit."

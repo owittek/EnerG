@@ -10,6 +10,6 @@ macOS 27's native charge limit (PowerUI `setMCLLimit:`) only accepts 80–100, a
 
 ## Consequences
 
-- The method is undocumented and may break with a macOS update. `MacHardware` checks `CHLT` after every write. If a value below 80 doesn't take, EnerG falls back to 80 and warns, so the 80–100 path keeps working.
+- The method is undocumented and may break with a macOS update. `NativeLimit` checks `CHLT` after writing a value below 80. If a value below 80 doesn't take, EnerG falls back to 80 and warns, so the 80–100 path keeps working.
 - When releasing the limit, EnerG first puts `mclLimitValue` back to a value System Settings can show (80).
 - A `CHIE` pulse fires only when the notification alone didn't apply the value.
