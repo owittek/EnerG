@@ -84,8 +84,9 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
 
 extension BatterySnapshot {
     /// Whether the battery is charging. While the native limit is on, SMC `CHLT` = `[limit, band, status]` says so
-    /// live: status `00` charging, `03` Limit Drain, `05` holding. At or above the limit, `00` is the firmware's state
-    /// for about a second after the limit is written, before it settles on `05`, so it reads as not charging.
+    /// live: status `00` charging, `03` Limit Drain, `05` holding. At or above the limit, `00` reads as not charging: the
+    /// firmware shows it for about a second after a limit write, before settling on `05`. A real top-off within the
+    /// same displayed percent therefore reads as holding.
     /// IOKit `IsCharging` refreshes only about every 60 s, so it is the fallback: limit off (where `00` means off),
     /// unplugged, unreadable, or an unknown status.
     public static func isCharging(chlt: [UInt8]?, percent: Int, adapterConnected: Bool,
