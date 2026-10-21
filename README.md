@@ -14,6 +14,22 @@ A free, open-source alternative to AlDente for these features. Don't run both: t
 
 **Requirements:** an Apple Silicon MacBook on macOS 27 or later. Intel Macs are not supported.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/owittek/EnerG/main/scripts/get.sh | bash
+```
+
+On first launch, click **Install Helper** and allow EnerG under System Settings → General → Login Items → Background App Activity.
+
+EnerG isn't notarized (that needs a paid Apple Developer account), so a browser download is blocked by Gatekeeper. The command above downloads with `curl`, which isn't. To install by hand instead:
+
+1. Download `EnerG.zip` from [Releases](https://github.com/owittek/EnerG/releases/latest) and move `EnerG.app` to Applications.
+2. Open it. macOS says it can't verify the app; click **Done**.
+3. In System Settings → Privacy & Security, click **Open Anyway** next to EnerG.
+
+**Update:** run the command again. It replaces the app and restarts the helper (asks for your password).
+
 ## How it works
 
 - **Charge Limit** uses the native macOS limit through the private PowerUI framework. When you lower the limit while plugged in, macOS runs the Mac from the battery until it is back at the limit (the Limit Drain), then holds it there on AC.
@@ -23,7 +39,7 @@ A free, open-source alternative to AlDente for these features. Don't run both: t
 - **MagSafe LED** is driven through the SMC key `ACLC`.
 - A root helper (`energd`, registered with `SMAppService`) does the writes. The menu bar app talks to it over XPC. Only apps signed by the same team can connect.
 
-## Build
+## Build from source
 
 ```sh
 brew install xcodegen
@@ -35,7 +51,7 @@ Use your Team ID (the OU field of your Apple Development certificate, shown in X
 
 Contributors: `project.yml` commits the author's team (`XG5GU82KF7`). Replace it with your own team ID; signing fails with someone else's.
 
-On first launch, click **Install Helper** and allow EnerG under System Settings → General → Login Items → Background App Activity.
+Maintainers: `scripts/release.sh` builds a signed `EnerG.zip` and publishes it as release `v<MARKETING_VERSION>` (bump it in `project.yml` first).
 
 ## Test
 
