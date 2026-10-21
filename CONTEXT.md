@@ -5,35 +5,28 @@ Menu bar app that caps a MacBook's battery charge so the Mac runs from the power
 ## Language
 
 **Charge Limit**:
-The battery percentage above which charging stops while the Mac keeps running from the adapter. One of 80, 85, 90, 95, 100.
+The battery percentage above which charging stops while the Mac keeps running from the adapter. A multiple of 5 from 50 to 100; 100 means no limit.
 _Avoid_: max charge, cap, threshold
 
-**Discharge**:
-Cutting adapter power while plugged in so the Mac runs from the battery until a **Discharge Target** is reached.
-_Avoid_: drain, force discharge
-
-**Discharge Target**:
-The percentage at which a **Discharge** stops. Defaults to the **Charge Limit**; may be lower than 80.
-
-**Auto-Discharge**:
-Starting a **Discharge** automatically whenever the battery is above the **Charge Limit**.
+**Limit Drain**:
+macOS's own behaviour when the adapter is attached and the battery is above the **Charge Limit**: the battery powers the Mac until it is back at the limit, and the adapter sits idle. Not started or stopped by EnerG.
+_Avoid_: discharge, force discharge
 
 **Top Up**:
 A one-shot charge to 100% that ignores the **Charge Limit** until the adapter is unplugged or the user stops it.
 
 **LED Mode**:
-How EnerG drives the MagSafe LED: Auto (reflects charging / at limit / discharging), Off, or Blink while discharging.
+How EnerG drives the MagSafe LED: Auto (reflects charging / at limit) or Off.
 
 **Pause**:
 Temporarily handing charging and the LED back to stock macOS behaviour without quitting EnerG.
 _Avoid_: disable, off (ambiguous with **LED Mode** Off)
 
 **Weak Adapter**:
-The state where the adapter is connected but the battery is still discharging because the Mac draws more than the adapter supplies.
+The state where the adapter is connected and charging is expected, but the battery is still draining because the Mac draws more than the adapter supplies. Never during a **Limit Drain**.
 
 ## Relationships
 
-- A **Discharge** ends at its **Discharge Target**, on sleep, on lid close, or when the charger is unplugged.
 - **Top Up** and **Pause** both suspend the **Charge Limit**; **Top Up** ends on unplug or when stopped, **Pause** ends only when the user resumes.
 
 ## Flagged ambiguities
