@@ -14,9 +14,6 @@ extension ChargeState {
 }
 
 extension Status {
-    /// Below this rating an adapter is a Weak Adapter: enough for light work, not for sustained load.
-    public static let weakAdapterBelowWatts = 50
-
     /// The state line under the battery %. "At limit" covers the firmware band below the limit too,
     /// where macOS doesn't charge until the battery drops 5 points under it.
     public var stateLabel: String {
@@ -37,13 +34,5 @@ extension Status {
         guard let snapshot else { return "—" }
         guard snapshot.adapterConnected else { return "Unplugged" }
         return snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
-    }
-
-    /// The line under `adapterLabel`: "light work" for a Weak Adapter (also during a Limit Drain), "idle" during a
-    /// Limit Drain, when macOS runs the Mac from the battery; nil otherwise.
-    public var adapterNote: String? {
-        guard let snapshot, snapshot.adapterConnected, let watts = snapshot.adapterWatts else { return nil }
-        if watts < Self.weakAdapterBelowWatts { return "light work" }
-        return state == .limitDrain ? "idle" : nil
     }
 }

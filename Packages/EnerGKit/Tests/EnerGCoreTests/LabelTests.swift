@@ -18,22 +18,10 @@ struct LabelTests {
         #expect(status(.atLimit, adapterWatts: 30).adapterLabel == "30 W")
     }
 
-    // A Weak Adapter's note wins over "idle": the rating is what the user needs to know.
-    @Test func adapterNote() {
-        #expect(status(.onBattery, adapterConnected: false).adapterNote == nil)
-        #expect(status(.atLimit, adapterWatts: nil).adapterNote == nil)
-        #expect(status(.atLimit, adapterWatts: 96).adapterNote == nil)
-        #expect(status(.limitDrain, percent: 85, adapterWatts: 96).adapterNote == "idle")
-        #expect(status(.atLimit, adapterWatts: 50).adapterNote == nil)
-        #expect(status(.atLimit, adapterWatts: 45).adapterNote == "light work")
-        #expect(status(.limitDrain, percent: 85, adapterWatts: 30).adapterNote == "light work")
-    }
-
     @Test func adapterLabelWithoutASnapshot() {
         let unreadable = Status(state: .unknown, settings: Settings(), snapshot: nil,
                                 effectiveLimit: nil, toppingUp: false, warnings: [.batteryUnreadable])
         #expect(unreadable.adapterLabel == "—")
-        #expect(unreadable.adapterNote == nil)
     }
 
     @Test func stateLabel() {

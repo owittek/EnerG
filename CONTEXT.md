@@ -22,9 +22,6 @@ How EnerG drives the MagSafe LED: Auto (reflects charging / at limit) or Off.
 Temporarily handing charging and the LED back to stock macOS behaviour without quitting EnerG.
 _Avoid_: disable, off (ambiguous with **LED Mode** Off)
 
-**Weak Adapter**:
-An adapter rated below 50 W: enough for light work, not for sustained load. Information only; under heavier load the battery covers the shortfall.
-
 ## Relationships
 
 - **Top Up** and **Pause** both suspend the **Charge Limit**; **Top Up** ends on unplug or when stopped, **Pause** ends only when the user resumes.

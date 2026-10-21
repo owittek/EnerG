@@ -102,3 +102,27 @@ With energd on this build and AlDente off:
 - (d) Set a limit below 80 while unplugged, then plug in: `get-limit` shows `CHLT` = the limit, and there's no `lowLimitUnsupported`.
 - (e) `scripts/smoke.sh` with energd suspended (SIGSTOP): `adapter off` sticks, and the restore leaves the original limit.
 - (f) 66 tests minus the removed ones plus the new ones all pass, and the app builds.
+
+## Outcome (2026-10-21, Mac17,8, macOS 27)
+
+- **(a) Pass.** With the 30 W charger, the row showed "30 W · light work". That text was truncated in a third of the row, so the note moved to its own line, and the second layout showed correctly while holding and during a Limit Drain.
+- **(b) Pass.** With the 70 W charger, plain "70 W" while holding and "idle" below it during a Limit Drain.
+- **(c) Failed first, passes after a fix.** The popover said "Not charging" while the battery tile showed charging. IOKit `IsCharging` changed only at the registry's ~60 s refresh (`UpdateTime` …092 → …152). Live `B0AC`×`B0AV` had been positive throughout. Fix: charging comes from the live `CHLT` status byte while the limit is on (section 3). Retest: "Charging" and "Draining to N%" switch within a few seconds, and so does the LED.
+- **(d) Pass.**
+  - Limit 65 set while unplugged, then plugged in: `get-limit` read `65 CHLT=65` (`CHLT`=410500) and `CHIE`=00, and the battery charged toward 65.
+  - No `lowLimitUnsupported` notice.
+- **(e) Pass.**
+  - With energd suspended, `adapter off` held for 6 s (battery −10.6 W), and `adapter on` brought it back (+17.9 W).
+  - The 85, 60 and off steps applied, and the restore went back to the baseline of 60.
+  - After SIGCONT, `CHIE`=00 and energd was running.
+  - With AC-W, `adapterConnected` stays true during the cut, so the smoke script's expectation text was corrected.
+- **(f) Pass.** 82 tests, and the app builds.
+
+## Follow-up: simpler popover (2026-10-21)
+
+After the device checks, the user chose a simpler popover. Weak Adapter is gone again:
+- The adapter row shows only the rating, or "Unplugged" or "Connected". There is no "light work" or "idle" note, and the dimmed arrow still marks a Limit Drain.
+- The Limit Drain sentence "macOS runs the Mac from the battery until it's back at the limit." is removed. The state line "Draining to N%" stays.
+- Removed from the code: `Status.adapterNote` and `weakAdapterBelowWatts`. Removed from the glossary: the term "Weak Adapter".
+
+Sections 1 and 2 above describe the intermediate state.

@@ -136,11 +136,6 @@ private struct BatteryTile: View {
                 Text(status.stateLabel).foregroundStyle(.secondary)
                 Spacer()
             }
-            if status.state == .limitDrain {
-                Text("macOS runs the Mac from the battery until it's back at the limit.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             HStack {
                 Text("Charge Limit")
                 Spacer()
@@ -245,13 +240,12 @@ private struct PowerFlowTile: View {
 
     var body: some View {
         if let snapshot = status.snapshot {
-            // Top-aligned so the adapter's note line doesn't push its icon out of the row.
-            HStack(alignment: .top, spacing: 6) {
-                node("powerplug.fill", status.adapterLabel, note: status.adapterNote)
-                arrow("arrow.right")
+            HStack(spacing: 6) {
+                node("powerplug.fill", status.adapterLabel)
+                Image(systemName: "arrow.right")
                     .foregroundStyle(adapterFlowing(snapshot) ? .primary : .tertiary)
                 node("laptopcomputer", snapshot.systemWatts.map { String(format: "%.0f W", $0) } ?? "—")
-                arrow(batteryArrow(snapshot))
+                Image(systemName: batteryArrow(snapshot))
                     .foregroundStyle(abs(snapshot.batteryWatts) < 0.5 ? .tertiary : .primary)
                 node("battery.75percent", String(format: "%+.0f W", snapshot.batteryWatts))
             }
@@ -260,20 +254,12 @@ private struct PowerFlowTile: View {
         }
     }
 
-    private func node(_ symbol: String, _ text: String, note: String? = nil) -> some View {
+    private func node(_ symbol: String, _ text: String) -> some View {
         VStack(spacing: 4) {
             Image(systemName: symbol).font(.title3)
             Text(text).font(.caption.monospacedDigit()).lineLimit(1)
-            if let note {
-                Text(note).font(.caption2).foregroundStyle(.secondary).lineLimit(1).padding(.top, -3)
-            }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    /// Sized like a node's icon line, so it stays level with the icons in the top-aligned row.
-    private func arrow(_ symbol: String) -> some View {
-        Image(systemName: symbol).font(.title3).imageScale(.small)
     }
 
     /// During a Limit Drain the adapter is attached but idle: macOS runs the Mac from the battery.
