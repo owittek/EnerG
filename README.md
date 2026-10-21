@@ -1,14 +1,14 @@
 # EnerG
 
-Menu bar app that keeps a MacBook below a Charge Limit and runs it from the adapter instead of cycling the battery. Open-source alternative to the parts of AlDente its author uses: Charge Limit, Discharge / Auto-Discharge, MagSafe LED control, Top Up and Pause. Terms are defined in [CONTEXT.md](CONTEXT.md).
+Menu bar app that keeps a MacBook below a Charge Limit and runs it from the adapter instead of cycling the battery. Open-source alternative to the parts of AlDente its author uses: Charge Limit (50–100%), MagSafe LED control, Top Up and Pause. Terms are defined in [CONTEXT.md](CONTEXT.md).
 
 **Requirements:** an Apple Silicon MacBook on macOS 27, with firmware that gates the SMC charge-inhibit keys (macOS 27, or the 26.7 / 15.8 security updates). Intel Macs are not supported.
 
 ## How it works
 
-- **Charge Limit** uses the native macOS limit (80/85/90/95/100%) through the private PowerUI framework.
-- **Discharge** cuts adapter power with the SMC key `CHIE`.
-- It cuts USB-C input as well as MagSafe, also with both attached. The SMC key `AC-W` reports whether any charger is physically plugged in, even while it is cut.
+- **Charge Limit** uses the native macOS limit through the private PowerUI framework. macOS itself drains the battery down to a lowered limit while plugged in (the Limit Drain), then holds it on AC.
+- **Limits below 80%**, which PowerUI rejects, are written to the smartcharging daemon's own defaults. When the battery is steady, a one-second cut of adapter power (SMC key `CHIE`) makes the daemon apply them. See [ADR 0001](docs/adr/0001-sub-80-limits-via-smartcharging-override.md).
+- The SMC key `AC-W` reports whether any charger is physically plugged in.
 - Battery power is read live from the SMC keys `B0AC` × `B0AV`; the battery registry refreshes only about once a minute.
 - **MagSafe LED** is driven through the SMC key `ACLC`.
 - A root helper (`energd`, registered with `SMAppService`) does the writes. The menu bar app talks to it over XPC. Only apps signed by the same team can connect.
@@ -42,8 +42,8 @@ Quit AlDente first; its helper writes the same SMC keys.
 - **Uninstall Helper** (popover footer) hands charging back to macOS, then unregisters `energd`.
 - It turns the native macOS Charge Limit off, as Pause does.
 - Your settings stay in `/Library/Application Support/EnerG/settings.json`, so a reinstall restores them. Delete that file for a clean slate.
-- If the helper can't be reached, the notice offers **Uninstall Anyway**. It removes the helper without handing charging back first. If the helper is still running, it restores the adapter and LED as it stops; if not, they may stay as last set. The native macOS Charge Limit may stay at its last value.
-- Switching EnerG off in System Settings → General → Login Items stops `energd` the same way: the adapter and LED are restored, and the native macOS Charge Limit stays at its last value.
+- If the helper can't be reached, the notice offers **Uninstall Anyway**. It removes the helper without handing charging back first. If the helper is still running, it hands the LED back as it stops; if not, they may stay as last set. The native macOS Charge Limit may stay at its last value.
+- Switching EnerG off in System Settings → General → Login Items stops `energd` the same way: the LED is handed back, and the native macOS Charge Limit stays at its last value.
 
 ## License
 

@@ -1,5 +1,7 @@
 # EnerG — Design
 
+> **Superseded in part (2026-10-21):** Discharge, Auto-Discharge, Discharge Target, Blink LED mode and the sleep assertion were removed and limits extended to 50–100. See [Limits redesign](2026-10-21-energ-limits-redesign-design.md). Sections below that describe them are historical.
+
 Date: 2026-10-20
 Status: approved (brainstorming)
 Glossary: [CONTEXT.md](../../../CONTEXT.md)
@@ -29,8 +31,8 @@ EnerG is a menu bar app that keeps a MacBook from charging above a **Charge Limi
 
 | Mechanism | Used for | Root? | Verified |
 |---|---|---|---|
-| PowerUI `PowerUISmartChargeClient` `setMCLLimit:error:` / `getMCLLimitWithError:` / `disableMCL:` / `enableMCL:` (private framework, loaded with dlopen) | **Charge Limit** (80/85/90/95/100) | yes for writes | `setMCLLimit(85)` → ok, SMC `CHLT` `500500`→`550500` |
-| SMC `CHIE` (hex_, 1 byte): `00` = adapter on, `08` = adapter off | **Discharge** | yes | Adapter off → "Battery Power"; back on → "AC Power" |
+| PowerUI `PowerUISmartChargeClient` `setMCLLimit:error:` / `getMCLLimitWithError:` / `disableMCL:` / `enableMCL:` (private framework, loaded with dlopen) | **Charge Limit** 80–100; 50–75 via the smartcharging override (ADR 0001) | yes for writes | `setMCLLimit(85)` → ok, SMC `CHLT` `500500`→`550500` |
+| SMC `CHIE` (hex_, 1 byte): `00` = adapter on, `08` = adapter off | Sub-80 trigger pulse (ADR 0001) | yes | Adapter off → "Battery Power"; back on → "AC Power" |
 | SMC `ACLC` (ui8): `00` = system, `01` = off, `03` = green, `04` = orange, `06` = slow blink, `07` = fast blink | **LED Mode** | yes | LED changed visibly; value survived a plug-state change |
 | SMC `AC-W` (si8): `04` = charger physically plugged in, `FF` (-1) = unplugged; unprivileged read | `BatterySnapshot.adapterConnected` | no | Stays `04` with `CHIE`=`08` and in the stuck state below |
 | IOKit `AppleSmartBattery` registry (`CurrentCapacity`, `IsCharging`, `ExternalConnected`, `InstantAmperage`, `Voltage`, `AdapterDetails`) | Battery snapshot | no | read OK |
@@ -48,24 +50,32 @@ Notes:
 - **Registry cadence:** the `AppleSmartBattery` registry refreshes about every 60 s (`UpdateTime`), on AC and on battery. The 2026-10-20 probe saw `UpdateTime` lag 50 s on AC too. While `CHIE` cuts the adapter, `InstantAmperage` keeps the last pre-cut value for up to a minute. `PSTR` (SMC) is live.
 - **Live battery power:** `B0AC` (si16 mA) and `B0AV` (ui16 mV), little-endian, are readable unprivileged and live. Their product tracks `PSTR` while cut. `PPBR` isn't battery power.
 - **Sub-80 lowering at a steady % (2026-10-21, Mac17,8):** with the battery holding at 76 (`CHLT`=4c0505), writing 72 and posting the notification applied it right away (`CHLT`=480503, Limit Drain started). No % tick or pulse was needed. A `CHIE` pulse (08, ~1 s, 00) while draining above the new limit kept "AC Power" throughout and left `CHLT` and the drain unchanged. No stuck state.
-- **Native limit drains to the limit (2026-10-20, Mac17,8):**
-  - With the adapter on and the battery above a set native limit, macOS reports "AC Power" / "AC attached", yet the battery supplies roughly the whole system draw: `B0AC` ≈ −0.6…−1.1 A, about −11 W at 82 % with an 80 % limit.
-  - This happens after a plain limit set too (Pause → resume, no cut involved), so it is firmware behaviour, not the unstick.
-  - Consequences, open for the next round:
-    - Auto-Discharge off doesn't hold above the limit.
-    - The Weak Adapter rule fires falsely there. This was observed on device.
+- **Limit Drain:**
+  - With the adapter attached and the battery above the native limit, macOS reports "AC Power", yet the battery supplies the whole system draw: `B0AC` × `B0AV` ≈ −`PSTR`, and the adapter is idle.
+  - It stops in the same sample in which the *displayed* % reaches the limit. Battery current then reads 0, and AC holds at the limit for hours, with no overshoot.
+  - Re-confirmed with AlDente quit: it is firmware behaviour.
+- **Asleep:** the drain is about 0 (raw capacity 6684 → 6680 mAh in 28 min).
+- **Displayed vs raw %:** `CurrentCapacity` (the displayed %) runs ~3–4 points above `RemainingCapacity / FullChargeCapacity`. The native limit compares against the displayed %, and so does EnerG.
+- **`CHLT` = `[limit, 0x05, status]`:** the status byte reads `03` during a Limit Drain, `05` while holding at the limit, and `00` while the limit is off. It is logged for diagnostics only.
+- **Sub-80 limits:**
+  - PowerUI `setMCLLimit:` rejects values below 80 (it returns false).
+  - The value lives in root's defaults domain `com.apple.smartcharging.topoffprotection`, key `mclLimitValue`. Writing it, then posting `com.apple.smartcharging.defaultschanged`, makes PowerUI `get` report the new value.
+  - The daemon pushes the value to `CHLT` only on its next displayed-% change or plug event. While the % is steady, a `CHIE` pulse (`08`, ~1–3 s, `00`) serves as the plug event; raising 70 → 72 worked that way.
+  - Verified: 70 was applied, the Limit Drain reached 70 and held 3 h on AC with battery current 0. 74 and 66 applied on a notify followed by a % tick.
+  - No chime or visible effect on the pulse.
+  - `enableMCL:` resets the value to 80.
+- **AlDente 1.39.4** uses the same mechanism (from its binary's strings: PowerUI 80…100 check, "PreferencesBackend", `mclLimitValue`, "pulsing discharge key").
 
 ## Behaviour
 
-| Situation | Native limit | Adapter (`CHIE`) | LED (Auto mode) | Sleep assertion |
-|---|---|---|---|---|
-| Below limit, charging | limit | on | orange | none |
-| At limit | limit | on | green | none |
-| Above limit, Auto-Discharge on | limit | **off** until % ≤ limit | off | prevent idle sleep |
-| Manual Discharge to target T | limit | **off** until % ≤ T | off | prevent idle sleep |
-| Top Up | disabled | on | orange, then green at 100 | none |
-| Paused | disabled | on | system (`00`) | none |
-| On battery (physically unplugged, `AC-W`) | limit | on | system | none |
+| Situation | Native limit | LED (Auto mode) |
+|---|---|---|
+| Below limit, charging | limit | orange |
+| At limit | limit | green |
+| Above limit, adapter attached (Limit Drain) | limit | green |
+| Top Up | disabled | orange, then green at 100 |
+| Paused | disabled | system (`00`) |
+| On battery (physically unplugged, `AC-W`) | limit | system |
 
 Rules:
 
