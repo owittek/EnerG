@@ -122,6 +122,41 @@ struct NativeLimitTests {
         #expect(controls.calls == [.setMCL(nil), .setMCL(80), .override(60), .notify])
     }
 
+    // The daemon can take a moment: applied within the settle window means no pulse.
+    @Test func belowEightyAppliedWithinTheSettleWindowNeedsNoPulse() throws {
+        let (limit, controls) = make { $0.daemon = .appliesAfterWaits(3) }
+        #expect(try limit.set(60) == 60)
+        #expect(controls.calls == [.override(60), .notify])
+        #expect(controls.waits == [0.25, 0.25, 0.25])
+    }
+
+    @Test func eachPollWindowLastsTheSettleTime() throws {
+        let (limit, controls) = make { $0.daemon = .neverApplies }
+        _ = try limit.set(60)
+        let poll = Array(repeating: 0.25, count: 8)
+        #expect(controls.waits == poll + [1] + poll)
+    }
+
+    // After a re-apply CHLT can still read the value from before the disable; the first poll waits it out.
+    @Test func reapplyWaitsBeforeTheFirstPoll() throws {
+        let (limit, controls) = make {
+            $0.chlt = 60
+            $0.daemon = .neverApplies
+            $0.staleReads = true
+        }
+        limit.adapterWasCut()
+        #expect(try limit.set(60) == 80)
+        #expect(controls.calls.last == .setMCL(80))
+    }
+
+    // The re-apply disable turns the limit off, so the value from before it decides whether 80 goes back first.
+    @Test func adapterWasCutThenDisableRestoresEightyFirst() throws {
+        let (limit, controls) = make { $0.chlt = 60 }
+        limit.adapterWasCut()
+        #expect(try limit.set(nil) == nil)
+        #expect(controls.calls == [.setMCL(nil), .setMCL(80), .setMCL(nil)])
+    }
+
     @Test func powerUIFailureThrows() {
         let (limit, _) = make { $0.failingMCL = true }
         #expect(throws: HardwareError.self) { try limit.set(85) }
