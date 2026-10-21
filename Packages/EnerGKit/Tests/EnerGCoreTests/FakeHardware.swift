@@ -12,6 +12,8 @@ final class FakeHardware: Hardware {
     var failing: Set<Feature> = []
     /// Non-nil limits whose write throws; disabling the limit still succeeds.
     var failingLimits: Set<Int> = []
+    /// Non-nil limit writes that throw `adapterCut` before one succeeds.
+    var adapterCuts = 0
     var snapshotFails = false
     /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override.
     var acceptsBelow80 = true
@@ -24,6 +26,10 @@ final class FakeHardware: Hardware {
     func setChargeLimit(_ percent: Int?) throws -> Int? {
         if failing.contains(.chargeLimit) { throw HardwareError.notPrivileged }
         if let percent, failingLimits.contains(percent) { throw HardwareError.io(-2) }
+        if percent != nil, adapterCuts > 0 {
+            adapterCuts -= 1
+            throw HardwareError.adapterCut
+        }
         writes.append(.limit(percent))
         if let percent, percent < 80, !acceptsBelow80 { return 80 }
         return percent

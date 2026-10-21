@@ -23,8 +23,8 @@ public final class Engine {
     private var effectiveLimit: Int?
     /// Set while `.didWake` re-asserts the full state: a failed write is retried, not marked unavailable.
     private var wakeReassert = false
-    /// A write failed during the wake re-assert; the next event re-asserts everything again.
-    private var wakeReassertFailed = false
+    /// A write is to be retried: the next event re-asserts everything.
+    private var retryNextEvent = false
 
     public init(hardware: any Hardware, settings: Settings) {
         self.hardware = hardware
@@ -104,9 +104,9 @@ public final class Engine {
         }
         if changed(\.led, to: next) { write(.led) { try hardware.setLED(next.led) } }
         applied = next
-        if wakeReassertFailed {
+        if retryNextEvent {
             applied = nil
-            wakeReassertFailed = false
+            retryNextEvent = false
         }
     }
 
@@ -120,15 +120,20 @@ public final class Engine {
         applied.map { $0[keyPath: field] != next[keyPath: field] } ?? true
     }
 
-    /// Runs a hardware write unless the feature is already unavailable; a failure makes it unavailable,
-    /// except during the wake re-assert, where it is retried on the next event.
+    /// Runs a hardware write unless the feature is already unavailable; a failure makes it unavailable, except during
+    /// the wake re-assert and for a first `adapterCut`, where it is retried on the next event.
     private func write(_ feature: Feature, _ operation: () throws -> Void) {
         guard !session.unavailable.contains(feature) else { return }
         do {
             try operation()
+            if feature == .chargeLimit { session.adapterLeftCut = false }
+        } catch HardwareError.adapterCut where !session.adapterLeftCut {
+            // The next snapshot turns the adapter back on, so the write is retried then.
+            session.adapterLeftCut = true
+            retryNextEvent = true
         } catch {
             if wakeReassert {
-                wakeReassertFailed = true
+                retryNextEvent = true
             } else {
                 session.unavailable.insert(feature)
             }

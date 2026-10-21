@@ -41,7 +41,8 @@ public final class NativeLimit {
 
     /// Sets the limit; nil disables it. Returns the limit now in effect: `percent`, or `powerUIMinimum` when a
     /// lower value didn't take. Below `powerUIMinimum` while unplugged, `percent` is returned unverified, because the
-    /// plug-in applies it. Throws when PowerUI fails or the adapter can't be turned back on after a pulse.
+    /// plug-in applies it. Throws when PowerUI fails, or `HardwareError.adapterCut` when the adapter can't be turned
+    /// back on after a pulse.
     /// Can block for about 5 s when a pulse is needed.
     public func set(_ percent: Int?) throws -> Int? {
         let reapplying = adapterCut
@@ -99,7 +100,7 @@ public final class NativeLimit {
     }
 
     /// A cut and reconnect reads as a plug event to the smartcharging daemon. Returns false when the cut fails
-    /// (the adapter was never cut); throws when the adapter can't be turned back on.
+    /// (the adapter was never cut); throws `HardwareError.adapterCut` when the adapter can't be turned back on.
     private func pulse() throws -> Bool {
         do { try controls.setAdapter(enabled: false) } catch { return false }
         controls.wait(1)
@@ -112,7 +113,13 @@ public final class NativeLimit {
                 controls.wait(0.5)
             }
         }
-        try controls.setAdapter(enabled: true)
+        do {
+            try controls.setAdapter(enabled: true)
+        } catch {
+            // The snapshot's heal turns it back on; the next set must then re-apply.
+            adapterCut = true
+            throw HardwareError.adapterCut
+        }
         return true
     }
 }

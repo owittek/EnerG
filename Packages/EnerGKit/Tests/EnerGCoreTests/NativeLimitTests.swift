@@ -71,13 +71,17 @@ struct NativeLimitTests {
         #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true)])
     }
 
-    @Test func pulseThrowsWhenTheAdapterStaysCut() {
+    // The snapshot's heal turns the adapter back on; the next set must then re-apply.
+    @Test func adapterStaysCutThrowsAndTheNextSetReapplies() throws {
         let (limit, controls) = make {
             $0.daemon = .appliesOnPulse
             $0.failingEnables = 3
         }
-        #expect(throws: HardwareError.self) { try limit.set(60) }
+        #expect(throws: HardwareError.adapterCut) { try limit.set(60) }
         #expect(controls.calls == [.override(60), .notify, .adapter(false)])
+        controls.calls.removeAll()
+        #expect(try limit.set(60) == 60)
+        #expect(controls.calls.first == .setMCL(nil))
     }
 
     // The override is already written; only the pulse is missing, so this is a fallback, not a failure.

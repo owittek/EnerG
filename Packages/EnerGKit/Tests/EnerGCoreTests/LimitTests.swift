@@ -15,6 +15,43 @@ struct LimitTests {
         #expect(status.settings.chargeLimit == 60)
     }
 
+    // The heal turns the adapter back on at the next event, so the write is retried then, not latched.
+    @Test func adapterCutIsRetriedOnTheNextEvent() {
+        let (engine, hw) = started()
+        hw.adapterCuts = 1
+        var status = engine.handle(.command(.setLimit(60)))
+        #expect(hw.writes.isEmpty)
+        #expect(!status.warnings.contains(.unavailable(.chargeLimit)))
+        status = engine.handle(.tick)
+        #expect(hw.writes == [.limit(60), .led(.orange)])
+        #expect(status.effectiveLimit == 60)
+        #expect(!status.warnings.contains(.unavailable(.chargeLimit)))
+    }
+
+    // A broken CHIE must not pulse on every tick.
+    @Test func secondAdapterCutInARowLatches() {
+        let (engine, hw) = started()
+        hw.adapterCuts = 2
+        engine.handle(.command(.setLimit(60)))
+        let status = engine.handle(.tick)
+        #expect(status.warnings.contains(.unavailable(.chargeLimit)))
+        hw.writes.removeAll()
+        engine.handle(.tick)
+        #expect(hw.writes.isEmpty)
+    }
+
+    @Test func aSuccessfulWriteResetsTheAdapterCutCount() {
+        let (engine, hw) = started()
+        hw.adapterCuts = 1
+        engine.handle(.command(.setLimit(60)))
+        engine.handle(.tick)
+        hw.adapterCuts = 1
+        engine.handle(.command(.setLimit(65)))
+        let status = engine.handle(.tick)
+        #expect(status.effectiveLimit == 65)
+        #expect(!status.warnings.contains(.unavailable(.chargeLimit)))
+    }
+
     @Test func effectiveLimitFollowsTheDefaultLimit() {
         let (engine, _) = started()
         #expect(engine.handle(.tick).effectiveLimit == 80)
