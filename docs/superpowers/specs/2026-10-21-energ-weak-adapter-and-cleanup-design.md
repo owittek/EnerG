@@ -50,6 +50,8 @@ The Weak Adapter warning flickers under a marginal load, and an alarm is the wro
   - Stale read: when re-applying, `waitUntilApplied` waits one `pollInterval` before its first `CHLT` read.
 - **Spurious heal:** `healAdapter()` waits 0.25 s after a non-zero `CHIE` read and reads it again. It heals only if the second read is also non-zero. The extra wait only happens in that rare case.
 
+- **Charging comes from the firmware status** (found in device check (c)): IOKit `IsCharging` refreshes only about every 60 s, so the popover said "Not charging" for up to a minute while the battery tile showed it charging. While the native limit is on and the adapter is connected, `BatterySnapshot.isCharging` now comes from the live `CHLT` status byte (`00` charging, `03` Limit Drain, `05` holding). With the limit off, unplugged, unreadable, or an unknown status, it falls back to `IsCharging`. The state line, the Limit Drain rule and the LED all follow it.
+
 ## 4. Tests and fakes
 
 - `FakeLimitControls`:

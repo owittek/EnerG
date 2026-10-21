@@ -38,10 +38,12 @@ public final class MacHardware: Hardware, LimitControls {
         let millivolts = Double(number("Voltage")?.int64Value ?? 0)
         let adapter = p["AdapterDetails"] as? [String: Any]
         let plugged = physicallyPlugged()
+        let adapterConnected = plugged ?? (p["ExternalConnected"] as? Bool ?? false)
         return BatterySnapshot(
             percent: percent,
-            isCharging: p["IsCharging"] as? Bool ?? false,
-            adapterConnected: plugged ?? (p["ExternalConnected"] as? Bool ?? false),
+            isCharging: BatterySnapshot.isCharging(chlt: try? read("CHLT", size: 3), adapterConnected: adapterConnected,
+                                                   registryIsCharging: p["IsCharging"] as? Bool ?? false),
+            adapterConnected: adapterConnected,
             adapterWatts: (adapter?["Watts"] as? NSNumber)?.intValue,
             batteryWatts: liveBatteryWatts() ?? milliamps * millivolts / 1_000_000,
             systemWatts: (try? readFloat("PSTR")).map(Double.init),

@@ -55,7 +55,7 @@ Notes:
   - Re-confirmed with AlDente quit: it is firmware behaviour.
 - **Asleep:** the drain is about 0 (raw capacity 6684 → 6680 mAh in 28 min).
 - **Displayed vs raw %:** `CurrentCapacity` (the displayed %) runs ~3–4 points above `RemainingCapacity / FullChargeCapacity`. The native limit compares against the displayed %, and so does EnerG.
-- **`CHLT` = `[limit, 0x05, status]`:** the status byte reads `03` during a Limit Drain, `05` while holding at the limit, and `00` while the limit is off. It is logged for diagnostics only.
+- **`CHLT` = `[limit, 0x05, status]`:** the status byte reads `03` during a Limit Drain, `05` while holding at the limit, and `00` while charging below the limit or while the limit is off. It is live, whereas IOKit `IsCharging` refreshes only about every 60 s, so the snapshot takes "charging" from it while the limit is on (2026-10-21, see [Weak Adapter and cleanup](2026-10-21-energ-weak-adapter-and-cleanup-design.md)).
 - **Sub-80 limits:**
   - PowerUI `setMCLLimit:` rejects values below 80 (it returns false).
   - The value lives in root's defaults domain `com.apple.smartcharging.topoffprotection`, key `mclLimitValue`. Writing it, then posting `com.apple.smartcharging.defaultschanged`, makes PowerUI `get` report the new value.

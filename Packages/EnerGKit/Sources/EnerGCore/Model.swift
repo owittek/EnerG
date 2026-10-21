@@ -41,6 +41,7 @@ public enum LEDState: String, Codable, Sendable {
 /// One reading of battery and power state.
 public struct BatterySnapshot: Codable, Equatable, Sendable {
     public var percent: Int
+    /// Live from the firmware while the native limit is on; see `isCharging(chlt:adapterConnected:registryIsCharging:)`.
     public var isCharging: Bool
     /// A charger is physically plugged in (SMC `AC-W`). Stays true while EnerG pulses the adapter and while
     /// macOS reports "Battery Power" with the adapter on above the native limit.
@@ -77,6 +78,20 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         batteryWatts = try c.decode(Double.self, forKey: .batteryWatts)
         systemWatts = try c.decodeIfPresent(Double.self, forKey: .systemWatts)
         plugSensed = try c.decodeIfPresent(Bool.self, forKey: .plugSensed) ?? true
+    }
+}
+
+extension BatterySnapshot {
+    /// Whether the battery is charging. While the native limit is on, SMC `CHLT` = `[limit, band, status]` says so
+    /// live: status `00` charging, `03` Limit Drain, `05` holding. IOKit `IsCharging` refreshes only about every 60 s,
+    /// so it is the fallback: limit off (where `00` means off), unplugged, unreadable, or an unknown status.
+    public static func isCharging(chlt: [UInt8]?, adapterConnected: Bool, registryIsCharging: Bool) -> Bool {
+        guard adapterConnected, let chlt, chlt.count == 3, chlt[0] != 0 else { return registryIsCharging }
+        switch chlt[2] {
+        case 0x00: return true
+        case 0x03, 0x05: return false
+        default: return registryIsCharging
+        }
     }
 }
 
