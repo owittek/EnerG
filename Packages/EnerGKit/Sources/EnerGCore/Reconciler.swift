@@ -124,6 +124,7 @@ public struct Reconciler {
         // A click since the send may have cancelled out the change: nothing to retry, the next poll decides.
         guard hasPendingChange else {
             firstFailure = nil
+            updateSettle(now)
             return .retry
         }
         let first = firstFailure ?? now
@@ -153,7 +154,7 @@ public struct Reconciler {
     }
 
     /// When the prediction gives way to the confirmed status unless one agrees first; nil while something is left to
-    /// send or nothing is settling.
+    /// send or nothing is settling. May be in the past once the cap has passed without an event.
     public var settleDeadline: ContinuousClock.Instant? { settle?.drainedAt.map { $0 + Self.settleCap } }
 
     /// The popover closed: keep showing what it showed until a poll sent after this answers, since replies arriving
@@ -176,8 +177,8 @@ public struct Reconciler {
         return Field.allCases.contains { request(for: $0, confirmed) != nil }
     }
 
-    /// No change in flight and nothing left to send.
-    private var queueEmpty: Bool { inFlight?.sent == nil && wants == Wants() }
+    /// No change in flight and nothing differs from the confirmed status.
+    private var queueEmpty: Bool { inFlight?.sent == nil && !hasPendingChange }
 
     /// Drops wants energd already reports, except the one in flight.
     private mutating func prune() {

@@ -268,8 +268,8 @@ struct ReconcilerDisplayTests {
         r.received(reported(percent: 85, charging: true), for: token, now: at(5))
         #expect(r.displayed(now: at(12))?.stateLabel == "Draining to 80%")
         let poll = r.beginPoll()!
-        r.received(reported(percent: 85), for: poll, now: at(12.2))
-        #expect(r.displayed(now: at(12.2))?.stateLabel == "Draining to 80%")
+        r.received(reported(percent: 79), for: poll, now: at(12.2))
+        #expect(r.displayed(now: at(12.2))?.stateLabel == "Not charging · resumes below 75%")
         #expect(!r.isSettling(now: at(12.2)))
     }
 
@@ -282,6 +282,16 @@ struct ReconcilerDisplayTests {
         let fresh = r.beginPoll()!
         r.received(reported(percent: 79), for: fresh, now: at(1))
         #expect(r.displayed(now: at(1))?.stateLabel == "Not charging · resumes below 75%")
+    }
+
+    @Test func aFailureWithNothingLeftToSendStillCapsTheSettle() {
+        var r = ready(reported(percent: 80))
+        r.want(.setPaused(true), now: at(0))
+        let (_, token) = r.nextCommand()!
+        r.want(.setPaused(false), now: at(0.1))
+        _ = r.failed(token, now: at(1))
+        #expect(!r.isSettling(now: at(7.1)))
+        #expect(r.displayed(now: at(7.1))?.state != .paused)
     }
 
     @Test func retriesKeepThePredictionAndGivingUpShowsTheTruth() {
