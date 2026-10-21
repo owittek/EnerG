@@ -1,6 +1,8 @@
 /// Everything the Engine needs from the machine. Writes may throw; the Engine
 /// then marks the matching `Feature` unavailable and stops writing it (`HardwareError.adapterCut` is retried once).
 public protocol Hardware: AnyObject {
+    /// Reads the battery. An adapter may also turn a cut adapter back on here, so call it after a write that threw
+    /// `HardwareError.adapterCut`.
     func snapshot() throws -> BatterySnapshot
     /// Sets the native Charge Limit; nil disables it. Returns the limit now in effect: `percent`, or 80 when
     /// this Mac doesn't accept a value below 80; nil when disabled.

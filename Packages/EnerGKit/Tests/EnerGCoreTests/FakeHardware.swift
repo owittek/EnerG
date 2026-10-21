@@ -15,10 +15,13 @@ final class FakeHardware: Hardware {
     /// Non-nil limit writes that throw `adapterCut` before one succeeds.
     var adapterCuts = 0
     var snapshotFails = false
-    /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override (once plugged in).
+    var snapshotCalls = 0
+    /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override (once
+    /// plugged in).
     var acceptsBelow80 = true
 
     func snapshot() throws -> BatterySnapshot {
+        snapshotCalls += 1
         if snapshotFails { throw HardwareError.io(-1) }
         return snap
     }

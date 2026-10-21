@@ -5,7 +5,7 @@ public enum Event: Equatable, Sendable {
     case powerChanged
     case didWake
     case command(Request)
-    /// Daemon shutdown: hands the LED to the system. Leaves the native Charge Limit and settings untouched.
+    /// Daemon shutdown: turns a cut adapter back on and hands the LED to the system. Leaves the native Charge Limit and settings untouched.
     /// Send nothing after it except `.start`.
     case stop
 }
@@ -25,6 +25,8 @@ public final class Engine {
     private var wakeReassert = false
     /// A write is to be retried: the next event re-asserts everything.
     private var retryNextEvent = false
+    /// The Charge Limit last asked for; kept apart from `applied`, which a retry clears, so the warning holds.
+    private var requestedLimit: Int?
     /// The last Charge Limit write was below 80 and made while unplugged, so it was returned unverified.
     private var limitUnverified = false
 
@@ -110,6 +112,7 @@ public final class Engine {
             }
         }
         if changed(\.led, to: next) { write(.led) { try hardware.setLED(next.led) } }
+        requestedLimit = next.chargeLimit
         applied = next
         if retryNextEvent {
             applied = nil
@@ -126,6 +129,7 @@ public final class Engine {
 
     /// A kickstart can't be told apart from a bootout, so the native Charge Limit stays as is.
     private func stop() {
+        _ = try? hardware.snapshot()   // an adapter left cut by the last set is turned back on there
         if applied?.led != .system { write(.led) { try hardware.setLED(.system) } }
         applied?.led = .system
     }
@@ -156,7 +160,7 @@ public final class Engine {
 
     private func status() -> Status {
         var warnings: [Warning] = []
-        if let effective = effectiveLimit, let requested = applied?.chargeLimit, effective > requested {
+        if let effective = effectiveLimit, let requested = requestedLimit, effective > requested {
             warnings.append(.lowLimitUnsupported)
         }
         warnings += Feature.allCases.filter(session.unavailable.contains).map(Warning.unavailable)

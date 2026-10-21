@@ -141,6 +141,15 @@ struct LimitTests {
         #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
     }
 
+    @Test func lowLimitUnsupportedSurvivesAWakeReassertWithAFailedWrite() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        #expect(engine.handle(.command(.setLimit(60))).warnings.contains(.lowLimitUnsupported))
+        hw.failing = [.led]
+        let status = engine.handle(.didWake)
+        #expect(status.effectiveLimit == 80)
+        #expect(status.warnings.contains(.lowLimitUnsupported))
+    }
+
     @Test func pluggingInLeavesALimitOfEightyOrMore() {
         let (engine, hw) = started()
         hw.snap.adapterConnected = false

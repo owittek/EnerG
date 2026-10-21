@@ -162,4 +162,12 @@ struct EngineBasicsTests {
         #expect(hw.writes == [.led(.system)])
         #expect(engine.settings == Settings())
     }
+
+    // The snapshot is where an adapter left cut by the last set is turned back on.
+    @Test func stopTakesASnapshotFirst() {
+        let (engine, hw) = started()
+        hw.snapshotCalls = 0
+        engine.handle(.stop)
+        #expect(hw.snapshotCalls == 1)
+    }
 }
