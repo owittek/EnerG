@@ -196,42 +196,13 @@ private struct ErrorTiles: View {
 private struct ControlGrid: View {
     let status: Status
     @Bindable var model: AppModel
-    @State private var choosingTarget = false
 
     /// Pause, or released before an uninstall that then failed; a click on Pause resumes either.
     private var paused: Bool { status.state == .paused }
-    private var discharging: Bool { status.dischargeTarget != nil }
     private var toppingUp: Bool { status.toppingUp }
-    /// A running Discharge can always be cancelled; a new one needs the adapter and a working CHIE.
-    private var dischargeDisabled: Bool {
-        paused || (!discharging && (status.isUnavailable(.discharge) || status.snapshot?.adapterConnected == false))
-    }
 
     var body: some View {
         Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-            GridRow {
-                ToggleTile(symbol: "battery.25percent", title: "Discharge",
-                           subtitle: status.dischargeTarget.map { "To \($0)% · click stop" } ?? "Run on battery",
-                           isOn: discharging, disabled: dischargeDisabled) {
-                    guard let current = model.status else { return }
-                    if current.dischargeTarget != nil {
-                        Task { await model.perform(.cancelDischarge) }
-                    } else {
-                        model.dischargeTarget = current.defaultDischargeTarget
-                        choosingTarget = true
-                    }
-                }
-                .popover(isPresented: $choosingTarget, arrowEdge: .bottom) {
-                    DischargePopover(model: model) { choosingTarget = false }
-                }
-                ToggleTile(symbol: "arrow.down.to.line", title: "Auto-Discharge",
-                           subtitle: status.settings.autoDischarge ? "Down to limit" : "Off",
-                           isOn: status.settings.autoDischarge,
-                           disabled: paused || status.isUnavailable(.discharge)) {
-                    guard let current = model.status else { return }
-                    Task { await model.perform(.setAutoDischarge(!current.settings.autoDischarge)) }
-                }
-            }
             GridRow {
                 ToggleTile(symbol: "bolt.fill", title: "Top Up",
                            subtitle: toppingUp ? "Click to stop" : "Once to 100%",
@@ -260,44 +231,6 @@ private struct ControlGrid: View {
                 }
             }
         }
-    }
-}
-
-private struct DischargePopover: View {
-    @Bindable var model: AppModel
-    let dismiss: () -> Void
-
-    /// A Discharge Target at or above the current % would end at once; unknown % can't start either.
-    private var targetTooHigh: Bool {
-        guard let percent = model.status?.snapshot?.percent else { return true }
-        return model.dischargeTarget >= percent
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Discharge to \(model.dischargeTarget)%").font(.headline.monospacedDigit())
-            Slider(value: Binding(get: { Double(model.dischargeTarget) }, set: { model.dischargeTarget = Int($0) }),
-                   in: 5...100, step: 5)
-            if let percent = model.status?.snapshot?.percent, model.dischargeTarget >= percent {
-                Text("Must be below \(percent)%")
-                    .font(.caption).foregroundStyle(.orange)
-            }
-            Text("EnerG cuts adapter power until the battery reaches the target.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button("Cancel", action: dismiss)
-                Button("Start") {
-                    dismiss()
-                    Task { await model.perform(.discharge(to: model.dischargeTarget)) }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(targetTooHigh)
-            }
-        }
-        .padding()
-        .frame(width: 240)
     }
 }
 
@@ -330,13 +263,11 @@ private struct PowerFlowTile: View {
     }
 
     private func adapterFlowing(_ snapshot: BatterySnapshot) -> Bool {
-        snapshot.adapterConnected && status.state != .discharging
+        snapshot.adapterConnected
     }
 
-    /// `adapterConnected` is physical presence, so an unplug shows even during a Discharge.
     private func adapterText(_ snapshot: BatterySnapshot) -> String {
         guard snapshot.adapterConnected else { return "Unplugged" }
-        if status.state == .discharging { return "Cut by EnerG" }
         return snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
     }
 
@@ -367,14 +298,6 @@ private struct Footer: View {
 // MARK: - Copy
 
 extension Status {
-    /// Discharge Target the popup opens with: 5 below the current %, at most the Charge Limit,
-    /// rounded down to a multiple of 5, within 5...100.
-    var defaultDischargeTarget: Int {
-        let limit = settings.chargeLimit
-        let wanted = snapshot.map { min(limit, $0.percent - 5) } ?? limit
-        return min(max(wanted / 5 * 5, 5), 100)
-    }
-
     /// The Engine stopped writing this Feature after a failed hardware write.
     func isUnavailable(_ feature: Feature) -> Bool { warnings.contains(.unavailable(feature)) }
 }
@@ -384,7 +307,6 @@ extension ChargeState {
         switch self {
         case .charging: "Charging"
         case .atLimit: "Holding at limit"
-        case .discharging: "Discharging"
         case .toppingUp: "Topping up to 100%"
         case .paused: "Paused"
         case .onBattery: "On battery"
@@ -407,7 +329,6 @@ extension Feature {
     var label: String {
         switch self {
         case .chargeLimit: "Charge Limit"
-        case .discharge: "Discharge"
         case .led: "MagSafe LED control"
         }
     }
@@ -418,7 +339,6 @@ extension LEDMode {
         switch self {
         case .auto: "Auto"
         case .off: "Off"
-        case .blink: "Blink on discharge"
         }
     }
 
@@ -426,8 +346,7 @@ extension LEDMode {
     var next: LEDMode {
         switch self {
         case .auto: .off
-        case .off: .blink
-        case .blink: .auto
+        case .off: .auto
         }
     }
 }

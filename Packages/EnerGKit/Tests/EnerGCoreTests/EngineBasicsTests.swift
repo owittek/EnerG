@@ -2,33 +2,13 @@ import Testing
 @testable import EnerGCore
 
 struct EngineBasicsTests {
-    @Test func startResetsAdapterFirstThenAppliesEverything() {
+    @Test func startAppliesEverything() {
         let hw = FakeHardware()
         let engine = Engine(hardware: hw, settings: Settings())
         let status = engine.handle(.start)
-        #expect(hw.writes == [.adapter(true), .adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
+        #expect(hw.writes == [.limit(80), .led(.orange)])
         #expect(status.state == .charging)
         #expect(status.warnings.isEmpty)
-    }
-
-    // A crash mid-Discharge leaves CHIE cut above the native limit: the start must unstick it.
-    @Test func startAboveLimitReappliesNativeLimit() {
-        let hw = FakeHardware()
-        hw.snap.percent = 85
-        hw.snap.isCharging = false
-        let engine = Engine(hardware: hw, settings: Settings(autoDischarge: false))
-        engine.handle(.start)
-        #expect(hw.writes == [.adapter(true), .adapter(true), .limit(nil), .limit(80), .led(.green), .preventSleep(false)])
-    }
-
-    @Test func wakeAboveLimitReappliesNativeLimit() {
-        let (engine, hw) = started(Settings(autoDischarge: false)) {
-            $0.snap.percent = 85
-            $0.snap.isCharging = false
-        }
-        engine.handle(.willSleep)
-        engine.handle(.didWake)
-        #expect(hw.writes == [.adapter(true), .limit(nil), .limit(80), .led(.green), .preventSleep(false)])
     }
 
     @Test func repeatedEventsWriteNothing() {
@@ -97,7 +77,7 @@ struct EngineBasicsTests {
         let restarted = Engine(hardware: hw2, settings: engine.settings)
         let status = restarted.handle(.start)
         #expect(status.state == .charging)
-        #expect(hw2.writes == [.adapter(true), .adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
+        #expect(hw2.writes == [.limit(80), .led(.orange)])
     }
 
     @Test func resumeAfterReleaseReapplies() {
@@ -120,13 +100,13 @@ struct EngineBasicsTests {
         #expect(!status.warnings.contains(.weakAdapter))
     }
 
-    @Test func ledModeOffAndBlink() {
+    @Test func ledModeOffAndBack() {
         let (engine, hw) = started()
         engine.handle(.command(.setLEDMode(.off)))
         #expect(hw.writes == [.led(.off)])
         hw.writes.removeAll()
-        engine.handle(.command(.setLEDMode(.blink)))
-        #expect(hw.writes == [.led(.orange)])   // blink only differs during a Discharge
+        engine.handle(.command(.setLEDMode(.auto)))
+        #expect(hw.writes == [.led(.orange)])
     }
 
     @Test func unreadableBatteryWritesNothingAndWarns() {
@@ -139,13 +119,12 @@ struct EngineBasicsTests {
         #expect(status.warnings.contains(.batteryUnreadable))
     }
 
-    @Test func startWithUnreadableBatteryOnlyEnablesAdapter() {
+    @Test func startWithUnreadableBatteryWritesNothing() {
         let hw = FakeHardware()
         hw.snapshotFails = true
         let engine = Engine(hardware: hw, settings: Settings())
         let status = engine.handle(.start)
-        // Once first thing on start, once more because nothing has been applied yet.
-        #expect(hw.writes == [.adapter(true), .adapter(true)])
+        #expect(hw.writes.isEmpty)
         #expect(status.state == .unknown)
         #expect(status.warnings.contains(.batteryUnreadable))
     }
@@ -158,70 +137,30 @@ struct EngineBasicsTests {
         #expect(status.state == .paused)
     }
 
-    @Test func failedAdapterReenableIsRetried() {
-        let (engine, hw) = started()
-        hw.snap.percent = 92
-        hw.snap.isCharging = false
-        engine.handle(.powerChanged)          // Auto-Discharge cuts the adapter
-        hw.failing = [.discharge]
-        hw.writes.removeAll()
-        let status = engine.handle(.willSleep)  // adapter-on fails
-        #expect(!hw.writes.contains(.adapter(true)))
-        #expect(!status.warnings.contains(.unavailable(.discharge)))
-        hw.failing = []
-        hw.writes.removeAll()
-        engine.handle(.tick)
-        #expect(hw.writes == [.adapter(true), .limit(nil), .limit(80)])   // 92 % > limit: re-apply the native limit
-    }
-
     @Test func wakeReassertsFullState() {
         let (engine, hw) = started()
-        engine.handle(.willSleep)
-        #expect(hw.writes.isEmpty)
         engine.handle(.didWake)
-        #expect(hw.writes == [.adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
+        #expect(hw.writes == [.limit(80), .led(.orange)])
     }
 
     @Test func failedWriteDuringWakeIsRetriedNotLatched() {
         let (engine, hw) = started()
-        engine.handle(.willSleep)
         hw.failing = [.led]
         let status = engine.handle(.didWake)
         #expect(!status.warnings.contains(.unavailable(.led)))
-        #expect(hw.writes == [.adapter(true), .limit(80), .preventSleep(false)])
+        #expect(hw.writes == [.limit(80)])
 
         hw.failing = []
         hw.writes.removeAll()
         engine.handle(.tick)   // wake re-assert incomplete: the next event re-asserts everything
-        #expect(hw.writes == [.adapter(true), .limit(80), .led(.orange), .preventSleep(false)])
+        #expect(hw.writes == [.limit(80), .led(.orange)])
     }
 
-    @Test func stopWhenIdleHandsLEDToSystem() {
+    @Test func stopHandsLEDToSystem() {
         let (engine, hw) = started()
-        let status = engine.handle(.stop)
-        // Adapter-on is always written on stop; the native Charge Limit is left alone.
-        #expect(hw.writes == [.adapter(true), .led(.system)])
-        #expect(status.dischargeTarget == nil)
-        #expect(engine.settings == Settings())
-    }
-
-    @Test func manualDischargeRejectedWhileUnplugged() {
-        let (engine, hw) = started()
-        hw.snap.adapterConnected = false
-        hw.snap.isCharging = false
-        engine.handle(.tick)
-        hw.writes.removeAll()
-        let status = engine.handle(.command(.discharge(to: 50)))
-        #expect(hw.writes.isEmpty)
-        #expect(status.dischargeTarget == nil)
-    }
-
-    @Test func dischargeRequestedJustAfterUnplugIsDropped() {
-        let (engine, hw) = started()   // last snapshot: plugged in
-        hw.snap.adapterConnected = false   // unplugged since, with no event yet
-        hw.snap.isCharging = false
-        let status = engine.handle(.command(.discharge(to: 50)))
+        engine.handle(.stop)
+        // The native Charge Limit is left alone.
         #expect(hw.writes == [.led(.system)])
-        #expect(status.dischargeTarget == nil)
+        #expect(engine.settings == Settings())
     }
 }

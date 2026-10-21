@@ -4,8 +4,7 @@ import Testing
 
 struct ProtocolTests {
     @Test(arguments: [
-        Request.getStatus, .setLimit(85), .discharge(to: 50), .cancelDischarge, .topUp, .cancelTopUp,
-        .setLEDMode(.blink), .setAutoDischarge(false), .setPaused(true), .release,
+        Request.getStatus, .setLimit(85), .topUp, .cancelTopUp, .setLEDMode(.off), .setPaused(true), .release,
     ])
     func requestRoundTrips(_ request: Request) throws {
         let data = try JSONEncoder().encode(request)
@@ -22,11 +21,10 @@ struct ProtocolTests {
 
     @Test func statusRoundTrips() throws {
         let status = Status(
-            state: .discharging,
-            settings: Settings(chargeLimit: 90, autoDischarge: false, ledMode: .off, paused: false),
+            state: .atLimit,
+            settings: Settings(chargeLimit: 90, ledMode: .off, paused: false),
             snapshot: BatterySnapshot(percent: 93, isCharging: false, adapterConnected: false,
                                       adapterWatts: 96, batteryWatts: -12.5, systemWatts: nil),
-            dischargeTarget: 90,
             toppingUp: true,
             warnings: [.weakAdapter, .unavailable(.led), .batteryUnreadable]
         )
@@ -35,7 +33,7 @@ struct ProtocolTests {
     }
 
     @Test func defaultSettings() {
-        #expect(Settings() == Settings(chargeLimit: 80, autoDischarge: true, ledMode: .auto, paused: false))
+        #expect(Settings() == Settings(chargeLimit: 80, ledMode: .auto, paused: false))
         #expect(Settings.allowedLimits == [80, 85, 90, 95, 100])
     }
 }

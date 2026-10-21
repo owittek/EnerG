@@ -3,7 +3,7 @@ import CPlatform
 import EnerGCore
 import EnerGMac
 
-let usage = "usage: energ-smoke status | get-limit | adapter on|off | led system|off|green|orange|blinkSlow | limit <80-100>|off"
+let usage = "usage: energ-smoke status | get-limit | adapter on|off | led system|off|green|orange | limit <80-100>|off"
 let args = Array(CommandLine.arguments.dropFirst())
 let command = args.first ?? ""
 let argument = args.count > 1 ? args[1] : ""

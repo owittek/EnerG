@@ -6,13 +6,11 @@ public struct Settings: Codable, Equatable, Sendable {
     public static let allowedLimits = [80, 85, 90, 95, 100]
 
     public var chargeLimit: Int
-    public var autoDischarge: Bool
     public var ledMode: LEDMode
     public var paused: Bool
 
-    public init(chargeLimit: Int = 80, autoDischarge: Bool = true, ledMode: LEDMode = .auto, paused: Bool = false) {
+    public init(chargeLimit: Int = 80, ledMode: LEDMode = .auto, paused: Bool = false) {
         self.chargeLimit = chargeLimit
-        self.autoDischarge = autoDischarge
         self.ledMode = ledMode
         self.paused = paused
     }
@@ -22,7 +20,6 @@ public struct Settings: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
         chargeLimit = (try? c.decodeIfPresent(Int.self, forKey: .chargeLimit)) ?? d.chargeLimit
-        autoDischarge = (try? c.decodeIfPresent(Bool.self, forKey: .autoDischarge)) ?? d.autoDischarge
         ledMode = (try? c.decodeIfPresent(LEDMode.self, forKey: .ledMode)) ?? d.ledMode
         paused = (try? c.decodeIfPresent(Bool.self, forKey: .paused)) ?? d.paused
     }
@@ -30,25 +27,23 @@ public struct Settings: Codable, Equatable, Sendable {
 
 /// How EnerG drives the MagSafe LED.
 public enum LEDMode: String, Codable, Sendable, CaseIterable {
-    /// Orange while charging, green when holding, off during a Discharge.
+    /// Orange while charging, green otherwise while plugged in.
     case auto
     /// Always off (while not paused and plugged in).
     case off
-    /// Like auto, but slow blink during a Discharge.
-    case blink
 }
 
 /// A concrete LED output. `system` hands the LED back to firmware.
 public enum LEDState: String, Codable, Sendable {
-    case system, off, green, orange, blinkSlow
+    case system, off, green, orange
 }
 
 /// One reading of battery and power state.
 public struct BatterySnapshot: Codable, Equatable, Sendable {
     public var percent: Int
     public var isCharging: Bool
-    /// A charger is physically plugged in (SMC `AC-W`). Stays true while EnerG cuts the adapter for a
-    /// Discharge and while macOS reports "Battery Power" with the adapter on above the native limit.
+    /// A charger is physically plugged in (SMC `AC-W`). Stays true while EnerG pulses the adapter and while
+    /// macOS reports "Battery Power" with the adapter on above the native limit.
     /// Falls back to IOKit `ExternalConnected` (adapter power reaches the Mac) if `AC-W` can't be read.
     public var adapterConnected: Bool
     /// Rated adapter wattage, if known.
@@ -57,7 +52,7 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
     public var batteryWatts: Double
     /// Total system draw, if known.
     public var systemWatts: Double?
-    /// `adapterConnected` was read from `AC-W`, so it stays true while EnerG cuts the adapter.
+    /// `adapterConnected` was read from `AC-W`, so it stays true while `CHIE` cuts the adapter.
     /// False on the `ExternalConnected` fallback, where a cut itself reads as unplugged.
     public var plugSensed: Bool
 
@@ -87,11 +82,11 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
 
 /// A hardware-backed capability that can become unavailable when its write fails.
 public enum Feature: String, Codable, Sendable, CaseIterable {
-    case chargeLimit, discharge, led
+    case chargeLimit, led
 }
 
 public enum ChargeState: String, Codable, Sendable {
-    case charging, atLimit, discharging, toppingUp, paused, onBattery, unknown
+    case charging, atLimit, toppingUp, paused, onBattery, unknown
 }
 
 public enum Warning: Codable, Hashable, Sendable {

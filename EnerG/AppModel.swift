@@ -17,8 +17,6 @@ final class AppModel {
     var offersUninstallAnyway = false
     var alDenteRunning = false
     var launchAtLogin = HelperInstaller.launchAtLogin
-    /// Discharge Target chosen in the Discharge popover; reset to `Status.defaultDischargeTarget` when it opens.
-    var dischargeTarget = 80
 
     private let client = DaemonClient()
     private var polling: Task<Void, Never>?

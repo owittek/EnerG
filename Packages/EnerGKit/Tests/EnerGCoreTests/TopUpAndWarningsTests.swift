@@ -25,22 +25,6 @@ struct TopUpAndWarningsTests {
         #expect(status.state == .charging)
     }
 
-    @Test func topUpCancelsDischargeAndBlocksAutoDischarge() {
-        let (engine, hw) = started()
-        hw.snap.percent = 92
-        hw.snap.isCharging = false
-        engine.handle(.powerChanged)
-        hw.writes.removeAll()
-
-        let status = engine.handle(.command(.topUp))
-        #expect(hw.writes == [.adapter(true), .limit(nil), .led(.green), .preventSleep(false)])
-        #expect(status.state == .toppingUp)
-
-        hw.writes.removeAll()
-        engine.handle(.tick)
-        #expect(hw.writes.isEmpty)
-    }
-
     @Test func statusReportsTopUpEvenWhenBatteryUnreadable() {
         let (engine, hw) = started()
         #expect(engine.handle(.command(.topUp)).toppingUp)
@@ -52,13 +36,13 @@ struct TopUpAndWarningsTests {
         #expect(!engine.handle(.command(.cancelTopUp)).toppingUp)
     }
 
-    @Test func pausedIgnoresTopUpAndDischarge() {
+    @Test func pausedIgnoresTopUp() {
         let (engine, hw) = started(Settings(paused: true))
         engine.handle(.command(.topUp))
-        engine.handle(.command(.discharge(to: 50)))
         let status = engine.handle(.tick)
         #expect(hw.writes.isEmpty)
         #expect(status.state == .paused)
+        #expect(!status.toppingUp)
     }
 
     @Test func weakAdapterNeedsTwoConsecutiveDrainingSamples() {
@@ -75,28 +59,8 @@ struct TopUpAndWarningsTests {
         hw.snap.batteryWatts = -5
         engine.handle(.tick)
         #expect(!engine.handle(.command(.getStatus)).warnings.contains(.weakAdapter))
-        #expect(!engine.handle(.lid(closed: false)).warnings.contains(.weakAdapter))
         #expect(!engine.handle(.didWake).warnings.contains(.weakAdapter))
         #expect(!engine.handle(.powerChanged).warnings.contains(.weakAdapter))
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
-    }
-
-    @Test func noWeakAdapterBlipAfterCancelledDischarge() {
-        let (engine, hw) = DischargeTests().dischargingAt92()
-        hw.snap.batteryWatts = -5   // battery current still reflects the cut
-        engine.handle(.command(.cancelDischarge))
-        #expect(!engine.handle(.powerChanged).warnings.contains(.weakAdapter))
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // first tick after the Discharge: skipped
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // 1 sample
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))    // 2 samples: a real Weak Adapter
-    }
-
-    @Test func tickThatEndsDischargeDoesNotCountWeakSample() {
-        let (engine, hw) = DischargeTests().dischargingAt92()
-        hw.snap.percent = 80
-        hw.snap.batteryWatts = -15
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // ends the Discharge: not counted
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))   // 1 sample
         #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
     }
 
@@ -109,14 +73,6 @@ struct TopUpAndWarningsTests {
         hw.snap.batteryWatts = -5
         #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
         #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
-    }
-
-    @Test func noWeakAdapterWarningWhileDischarging() {
-        let (engine, hw) = started()
-        hw.snap.percent = 92
-        hw.snap.batteryWatts = -20
-        engine.handle(.tick)
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
     }
 
     @Test func failedLEDWriteDisablesOnlyLED() {
@@ -155,7 +111,6 @@ struct TopUpAndWarningsTests {
         let (engine, hw) = started { $0.failing = [.led] }
         hw.failing = []
         engine.handle(.command(.setLEDMode(.off)))
-        engine.handle(.willSleep)
         engine.handle(.didWake)
         #expect(!hw.writes.contains { if case .led = $0 { true } else { false } })
         #expect(engine.handle(.tick).warnings.contains(.unavailable(.led)))

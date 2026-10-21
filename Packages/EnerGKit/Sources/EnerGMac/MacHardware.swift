@@ -1,16 +1,14 @@
 import Foundation
 import IOKit
-import IOKit.pwr_mgt
 import CPlatform
 import EnerGCore
 import OSLog
 
-/// The real Mac: AppleSMC (CHIE adapter cut, ACLC LED, PSTR system power, AC-W plug presence, B0AC/B0AV battery power), PowerUI native
+/// The real Mac: AppleSMC (CHIE adapter pulse, ACLC LED, PSTR system power, AC-W plug presence, B0AC/B0AV battery power), PowerUI native
 /// Charge Limit, and the AppleSmartBattery registry entry. Writes need root.
 /// SMC reads straight after a write can return the old value; the Engine never reads back, so this is harmless.
 public final class MacHardware: Hardware {
     private let smc: io_connect_t
-    private var sleepAssertion: IOPMAssertionID = 0
     private let log = Logger(subsystem: "app.energ", category: "hardware")
 
     public init() throws {
@@ -21,7 +19,6 @@ public final class MacHardware: Hardware {
     }
 
     deinit {
-        if sleepAssertion != 0 { IOPMAssertionRelease(sleepAssertion) }
         smc_close(smc)
     }
 
@@ -63,25 +60,8 @@ public final class MacHardware: Hardware {
         case .off: 0x01
         case .green: 0x03
         case .orange: 0x04
-        case .blinkSlow: 0x06
         }
         try write("ACLC", value)
-    }
-
-    public func setPreventSleep(_ on: Bool) {
-        if on, sleepAssertion == 0 {
-            let rc = IOPMAssertionCreateWithName("PreventUserIdleSystemSleep" as CFString,
-                                                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                                 "EnerG Discharge" as CFString, &sleepAssertion)
-            // Without it the Mac may idle-sleep, and willSleep then ends the Discharge safely.
-            if rc != kIOReturnSuccess {
-                sleepAssertion = 0
-                log.error("sleep assertion failed: \(rc, privacy: .public)")
-            }
-        } else if !on, sleepAssertion != 0 {
-            IOPMAssertionRelease(sleepAssertion)
-            sleepAssertion = 0
-        }
     }
 
     // MARK: - SMC
@@ -103,7 +83,7 @@ public final class MacHardware: Hardware {
         return Int8(bitPattern: bytes[0]) > 0
     }
 
-    /// Battery power from `B0AC` (si16 mA, negative while discharging) × `B0AV` (ui16 mV). Live, unlike the
+    /// Battery power from `B0AC` (si16 mA, negative while supplying power) × `B0AV` (ui16 mV). Live, unlike the
     /// registry, which refreshes about once a minute. nil if either key can't be read.
     private func liveBatteryWatts() -> Double? {
         guard let current = try? read("B0AC", size: 2), let voltage = try? read("B0AV", size: 2) else { return nil }

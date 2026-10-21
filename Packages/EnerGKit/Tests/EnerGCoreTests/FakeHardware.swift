@@ -3,7 +3,7 @@
 /// Records writes; tests set `snap` to simulate the battery.
 final class FakeHardware: Hardware {
     enum Write: Equatable {
-        case limit(Int?), adapter(Bool), led(LEDState), preventSleep(Bool)
+        case limit(Int?), led(LEDState)
     }
 
     var snap = BatterySnapshot(percent: 70, isCharging: true, adapterConnected: true,
@@ -25,18 +25,9 @@ final class FakeHardware: Hardware {
         writes.append(.limit(percent))
     }
 
-    func setAdapter(enabled: Bool) throws {
-        if failing.contains(.discharge) { throw HardwareError.notPrivileged }
-        writes.append(.adapter(enabled))
-    }
-
     func setLED(_ state: LEDState) throws {
         if failing.contains(.led) { throw HardwareError.notPrivileged }
         writes.append(.led(state))
-    }
-
-    func setPreventSleep(_ on: Bool) {
-        writes.append(.preventSleep(on))
     }
 }
 

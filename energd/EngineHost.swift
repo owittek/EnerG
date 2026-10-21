@@ -29,7 +29,7 @@ final class EngineHost: @unchecked Sendable {
         }
     }
 
-    /// Hands the adapter, LED and sleep assertion back to macOS, then exits. Runs on the engine
+    /// Hands the LED back to macOS, then exits. Runs on the engine
     /// queue so no XPC or IOKit event can re-apply state between the stop and the exit.
     func shutdown(exitCode: Int32) -> Never {
         queue.sync {

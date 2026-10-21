@@ -20,15 +20,15 @@ final class SettingsStoreTests {
 
     @Test func saveThenLoadRoundTrips() throws {
         let store = SettingsStore(url: url)
-        let settings = Settings(chargeLimit: 95, autoDischarge: false, ledMode: .blink, paused: true)
+        let settings = Settings(chargeLimit: 95, ledMode: .off, paused: true)
         try store.save(settings)
         #expect(store.load() == settings)
     }
 
     @Test func disallowedChargeLimitLoadsDefaultLimit() throws {
         let store = SettingsStore(url: url)
-        try store.save(Settings(chargeLimit: 87, autoDischarge: false, ledMode: .off, paused: true))
-        #expect(store.load() == Settings(chargeLimit: 80, autoDischarge: false, ledMode: .off, paused: true))
+        try store.save(Settings(chargeLimit: 87, ledMode: .off, paused: true))
+        #expect(store.load() == Settings(chargeLimit: 80, ledMode: .off, paused: true))
     }
 
     @Test func corruptFileLoadsDefaults() throws {
@@ -37,12 +37,18 @@ final class SettingsStoreTests {
     }
 
     @Test func missingFieldDefaultsOnlyThatField() throws {
-        try write(#"{"chargeLimit":90,"autoDischarge":false,"paused":true}"#)
-        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, autoDischarge: false, ledMode: .auto, paused: true))
+        try write(#"{"chargeLimit":90,"paused":true}"#)
+        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, ledMode: .auto, paused: true))
     }
 
     @Test func invalidFieldDefaultsOnlyThatField() throws {
-        try write(#"{"chargeLimit":90,"autoDischarge":false,"ledMode":"rainbow","paused":true}"#)
-        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, autoDischarge: false, ledMode: .auto, paused: true))
+        try write(#"{"chargeLimit":90,"ledMode":"rainbow","paused":true}"#)
+        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, ledMode: .auto, paused: true))
+    }
+
+    // A settings file from a build with Discharge: the old key is ignored, Blink falls back to Auto.
+    @Test func settingsFromDischargeBuildLoad() throws {
+        try write(#"{"chargeLimit":90,"autoDischarge":false,"ledMode":"blink","paused":true}"#)
+        #expect(SettingsStore(url: url).load() == Settings(chargeLimit: 90, ledMode: .auto, paused: true))
     }
 }
