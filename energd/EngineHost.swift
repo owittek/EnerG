@@ -29,6 +29,11 @@ final class EngineHost: @unchecked Sendable {
         }
     }
 
+    /// Returns once the event in progress, such as a limit write with its adapter pulse, has finished.
+    func waitForIdle() {
+        queue.sync {}
+    }
+
     /// Hands the LED back to macOS, then exits. Runs on the engine
     /// queue so no XPC or IOKit event can re-apply state between the stop and the exit.
     func shutdown(exitCode: Int32) -> Never {

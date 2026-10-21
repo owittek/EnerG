@@ -49,7 +49,10 @@ final class SystemEvents {
 
     private func power(_ type: natural_t, _ argument: UnsafeMutableRawPointer?) {
         switch type {
-        case messageCanSystemSleep, messageSystemWillSleep:
+        case messageCanSystemSleep:
+            IOAllowPowerChange(rootPort, Int(bitPattern: argument))
+        case messageSystemWillSleep:
+            host.waitForIdle()   // don't sleep with the adapter cut mid-pulse
             IOAllowPowerChange(rootPort, Int(bitPattern: argument))
         case messageSystemHasPoweredOn:
             host.handle(.didWake)

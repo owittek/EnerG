@@ -9,7 +9,7 @@ let command = args.first ?? ""
 let argument = args.count > 1 ? args[1] : ""
 
 do {
-    let hw = try MacHardware()
+    let hw = try MacHardware(healsAdapter: false)
     switch (command, argument) {
     case ("status", _):
         print(try hw.snapshot())

@@ -14,12 +14,15 @@ public final class MacHardware: Hardware, LimitControls {
     private let log = Logger(subsystem: "app.energ", category: "hardware")
     /// Holds `self` as its controls; MacHardware lives for the whole process, so the cycle is harmless.
     private lazy var nativeLimit = NativeLimit(controls: self)
+    /// `snapshot()` turns a cut adapter back on. energ-smoke passes false so its `adapter off` sticks.
+    private let healsAdapter: Bool
 
-    public init() throws {
+    public init(healsAdapter: Bool = true) throws {
         var conn: io_connect_t = 0
         let kr = smc_open(&conn)
         guard kr == KERN_SUCCESS else { throw HardwareError.io(kr) }
         smc = conn
+        self.healsAdapter = healsAdapter
     }
 
     deinit {
@@ -27,6 +30,7 @@ public final class MacHardware: Hardware, LimitControls {
     }
 
     public func snapshot() throws -> BatterySnapshot {
+        if healsAdapter { healAdapter() }
         let p = try Self.batteryProperties()
         func number(_ key: String) -> NSNumber? { p[key] as? NSNumber }
         guard let percent = number("CurrentCapacity")?.intValue else { throw HardwareError.keyMissing("CurrentCapacity") }
@@ -49,12 +53,14 @@ public final class MacHardware: Hardware, LimitControls {
         try nativeLimit.set(percent)
     }
 
-    /// Turns `CHIE` back on if a crash mid-pulse (or an older build's Discharge) left the adapter cut; the next
-    /// `setChargeLimit` then re-applies the limit so macOS doesn't stay on battery. energd calls it once before `.start`.
-    public func recoverAdapter() {
+    /// Turns `CHIE` back on if the adapter was left cut: a pulse whose re-enable failed, a crash mid-pulse, or an
+    /// older build's Discharge. The next `setChargeLimit` then re-applies the limit so macOS doesn't stay on battery.
+    /// The Engine takes a snapshot on every event (`.start` included), from the same serial context as
+    /// `setChargeLimit`, so this never runs mid-pulse. Never throws.
+    private func healAdapter() {
         guard let chie = try? read("CHIE", size: 1), chie[0] != 0x00 else { return }
         do { try setAdapter(enabled: true) } catch {
-            log.error("adapter re-enable at start failed: \(String(describing: error), privacy: .public)")
+            log.error("adapter re-enable failed: \(String(describing: error), privacy: .public)")
         }
         nativeLimit.adapterWasCut()
     }
@@ -79,6 +85,7 @@ public final class MacHardware: Hardware, LimitControls {
         CFPreferencesSetValue("mclLimitValue" as CFString, NSNumber(value: percent), domain,
                               kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
         guard CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) else {
+            log.error("writing the smartcharging override failed")
             throw HardwareError.io(-3)
         }
     }

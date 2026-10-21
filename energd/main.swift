@@ -56,7 +56,7 @@ func makeListener() -> XPCListener {
 }
 let listener = makeListener()
 
-hardware.recoverAdapter()
+// Its snapshot turns a cut adapter back on before the limit is written (MacHardware).
 host.handle(.start)
 
 let events = SystemEvents(host: host)
