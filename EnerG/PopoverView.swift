@@ -133,8 +133,13 @@ private struct BatteryTile: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(status.snapshot.map { "\($0.percent)%" } ?? "—")
                     .font(.system(size: 34, weight: .semibold).monospacedDigit())
-                Text(status.state.label).foregroundStyle(.secondary)
+                Text(status.stateLabel).foregroundStyle(.secondary)
                 Spacer()
+            }
+            if status.state == .limitDrain {
+                Text("macOS runs the Mac from the battery until it's back at the limit.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Text("Charge Limit")
@@ -142,7 +147,7 @@ private struct BatteryTile: View {
                 Text("\(Int(limit))%").monospacedDigit()
             }
             .font(.callout)
-            Slider(value: Binding(get: { limit }, set: { draftLimit = $0 }), in: 80...100, step: 5,
+            Slider(value: Binding(get: { limit }, set: { draftLimit = $0 }), in: 50...100, step: 5,
                    onEditingChanged: { editing in
                        guard !editing, let draft = draftLimit else { return }
                        guard Int(draft) != status.settings.chargeLimit else {
@@ -262,13 +267,15 @@ private struct PowerFlowTile: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// During a Limit Drain the adapter is attached but idle: macOS runs the Mac from the battery.
     private func adapterFlowing(_ snapshot: BatterySnapshot) -> Bool {
-        snapshot.adapterConnected
+        snapshot.adapterConnected && status.state != .limitDrain
     }
 
     private func adapterText(_ snapshot: BatterySnapshot) -> String {
         guard snapshot.adapterConnected else { return "Unplugged" }
-        return snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
+        let rated = snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
+        return status.state == .limitDrain ? "\(rated) · idle" : rated
     }
 
     /// Mac → battery while charging, battery → Mac while draining.
@@ -300,6 +307,22 @@ private struct Footer: View {
 extension Status {
     /// The Engine stopped writing this Feature after a failed hardware write.
     func isUnavailable(_ feature: Feature) -> Bool { warnings.contains(.unavailable(feature)) }
+}
+
+extension Status {
+    /// The state line under the battery %. "At limit" covers the firmware band below the limit too,
+    /// where macOS doesn't charge until the battery drops 5 points under it.
+    var stateLabel: String {
+        switch state {
+        case .limitDrain:
+            return effectiveLimit.map { "Draining to \($0)%" } ?? state.label
+        case .atLimit:
+            guard let limit = effectiveLimit, let percent = snapshot?.percent else { return "Not charging" }
+            return percent >= limit ? "Holding at \(limit)%" : "Not charging · resumes below \(limit - 5)%"
+        default:
+            return state.label
+        }
+    }
 }
 
 extension ChargeState {
