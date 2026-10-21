@@ -3,7 +3,9 @@
 public protocol Hardware: AnyObject {
     func snapshot() throws -> BatterySnapshot
     /// Sets the native Charge Limit; nil disables it.
-    func setChargeLimit(_ percent: Int?) throws
+    /// Sets the native Charge Limit; nil disables it. Returns the limit now in effect: `percent`, or 80 when
+    /// this Mac doesn't accept a value below 80; nil when disabled.
+    func setChargeLimit(_ percent: Int?) throws -> Int?
     func setLED(_ state: LEDState) throws
 }
 

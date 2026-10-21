@@ -27,10 +27,10 @@ do {
         guard let state = LEDState(rawValue: argument) else { print(usage); exit(2) }
         try hw.setLED(state)
     case ("limit", "off"):
-        try hw.setChargeLimit(nil)
+        _ = try hw.setChargeLimit(nil)
     case ("limit", _):
         guard let limit = Int(argument), (0...100).contains(limit) else { print(usage); exit(2) }
-        try hw.setChargeLimit(limit)
+        _ = try hw.setChargeLimit(limit)
     default:
         print(usage)
         exit(2)

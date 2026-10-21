@@ -41,13 +41,14 @@ public final class MacHardware: Hardware {
         )
     }
 
-    public func setChargeLimit(_ percent: Int?) throws {
+    public func setChargeLimit(_ percent: Int?) throws -> Int? {
         if let percent {
             // enableMCL: resets the limit to 80; setMCLLimit: also enables
             try check(powerui_set_limit(UInt8(percent)))
         } else {
             try check(powerui_set_enabled(false))
         }
+        return percent
     }
 
     public func setAdapter(enabled: Bool) throws {

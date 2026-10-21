@@ -2,8 +2,8 @@ import Foundation
 
 /// User-chosen configuration; persisted by energd.
 public struct Settings: Codable, Equatable, Sendable {
-    /// Charge Limit values the native macOS limit accepts. 100 means "no limit".
-    public static let allowedLimits = [80, 85, 90, 95, 100]
+    /// Charge Limit values EnerG offers. 100 means "no limit"; below 80 goes through the smartcharging override (ADR 0001).
+    public static let allowedLimits = Array(stride(from: 50, through: 100, by: 5))
 
     public var chargeLimit: Int
     public var ledMode: LEDMode
@@ -91,6 +91,8 @@ public enum ChargeState: String, Codable, Sendable {
 
 public enum Warning: Codable, Hashable, Sendable {
     case weakAdapter
+    /// A Charge Limit below 80 didn't take, so 80 is in effect.
+    case lowLimitUnsupported
     case unavailable(Feature)
     case batteryUnreadable
 }

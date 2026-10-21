@@ -19,6 +19,8 @@ public final class Engine {
     /// Last actuation written; nil means unknown, so everything is written.
     private var applied: Actuation?
     private var snapshot: BatterySnapshot?
+    /// What `setChargeLimit` reported in effect; nil when off, unavailable or not written yet.
+    private var effectiveLimit: Int?
     /// Set while `.didWake` re-asserts the full state: a failed write is retried, not marked unavailable.
     private var wakeReassert = false
     /// A write failed during the wake re-assert; the next event re-asserts everything again.
@@ -35,6 +37,7 @@ public final class Engine {
         case .start:
             session = Session()
             applied = nil
+            effectiveLimit = nil
         case .tick, .powerChanged:
             break
         case .stop:
@@ -93,7 +96,12 @@ public final class Engine {
     }
 
     private func apply(_ next: Actuation) {
-        if changed(\.chargeLimit, to: next) { write(.chargeLimit) { try hardware.setChargeLimit(next.chargeLimit) } }
+        if changed(\.chargeLimit, to: next) {
+            write(.chargeLimit) {
+                effectiveLimit = nil
+                effectiveLimit = try hardware.setChargeLimit(next.chargeLimit)
+            }
+        }
         if changed(\.led, to: next) { write(.led) { try hardware.setLED(next.led) } }
         applied = next
         if wakeReassertFailed {
@@ -130,10 +138,13 @@ public final class Engine {
     private func status() -> Status {
         var warnings: [Warning] = []
         if session.weakSamples >= 2 { warnings.append(.weakAdapter) }
+        if let effective = effectiveLimit, let requested = applied?.chargeLimit, effective > requested {
+            warnings.append(.lowLimitUnsupported)
+        }
         warnings += Feature.allCases.filter(session.unavailable.contains).map(Warning.unavailable)
         if snapshot == nil { warnings.append(.batteryUnreadable) }
         return Status(state: state(), settings: settings, snapshot: snapshot,
-                      toppingUp: session.toppingUp, warnings: warnings)
+                      effectiveLimit: effectiveLimit, toppingUp: session.toppingUp, warnings: warnings)
     }
 
     private func state() -> ChargeState {

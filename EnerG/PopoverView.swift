@@ -319,6 +319,7 @@ extension Warning {
     var label: String {
         switch self {
         case .weakAdapter: "Weak Adapter: the battery is draining while plugged in."
+        case .lowLimitUnsupported: "This Mac doesn't accept limits below 80%. Holding at 80%."
         case .unavailable(let feature): "\(feature.label) is unavailable on this Mac."
         case .batteryUnreadable: "Can't read the battery state."
         }

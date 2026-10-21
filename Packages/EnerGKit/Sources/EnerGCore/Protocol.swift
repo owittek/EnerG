@@ -25,15 +25,19 @@ public struct Status: Codable, Equatable, Sendable {
     public var settings: Settings
     /// nil when the battery could not be read.
     public var snapshot: BatterySnapshot?
+    /// The native Charge Limit in effect: the setting, or 80 when a lower one didn't take. nil while off,
+    /// paused, topping up, or when the Charge Limit is unavailable.
+    public var effectiveLimit: Int?
     /// A Top Up is active. Also true while `state` shows something else, e.g. `.unknown`.
     public var toppingUp: Bool
     public var warnings: [Warning]
 
     public init(state: ChargeState, settings: Settings, snapshot: BatterySnapshot?,
-                toppingUp: Bool, warnings: [Warning]) {
+                effectiveLimit: Int?, toppingUp: Bool, warnings: [Warning]) {
         self.state = state
         self.settings = settings
         self.snapshot = snapshot
+        self.effectiveLimit = effectiveLimit
         self.toppingUp = toppingUp
         self.warnings = warnings
     }

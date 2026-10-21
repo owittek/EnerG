@@ -25,8 +25,9 @@ struct ProtocolTests {
             settings: Settings(chargeLimit: 90, ledMode: .off, paused: false),
             snapshot: BatterySnapshot(percent: 93, isCharging: false, adapterConnected: false,
                                       adapterWatts: 96, batteryWatts: -12.5, systemWatts: nil),
+            effectiveLimit: 80,
             toppingUp: true,
-            warnings: [.weakAdapter, .unavailable(.led), .batteryUnreadable]
+            warnings: [.weakAdapter, .lowLimitUnsupported, .unavailable(.led), .batteryUnreadable]
         )
         let data = try JSONEncoder().encode(status)
         #expect(try JSONDecoder().decode(Status.self, from: data) == status)
@@ -34,6 +35,6 @@ struct ProtocolTests {
 
     @Test func defaultSettings() {
         #expect(Settings() == Settings(chargeLimit: 80, ledMode: .auto, paused: false))
-        #expect(Settings.allowedLimits == [80, 85, 90, 95, 100])
+        #expect(Settings.allowedLimits == [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100])
     }
 }

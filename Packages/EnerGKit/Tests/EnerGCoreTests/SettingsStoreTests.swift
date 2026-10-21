@@ -14,6 +14,14 @@ final class SettingsStoreTests {
         try Data(text.utf8).write(to: url)
     }
 
+    @Test func limitsBelowEightyLoad() throws {
+        let store = SettingsStore(url: url)
+        try store.save(Settings(chargeLimit: 60))
+        #expect(store.load() == Settings(chargeLimit: 60))
+        try store.save(Settings(chargeLimit: 45))
+        #expect(store.load() == Settings())
+    }
+
     @Test func missingFileLoadsDefaults() {
         #expect(SettingsStore(url: url).load() == Settings())
     }
