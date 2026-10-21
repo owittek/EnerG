@@ -5,8 +5,8 @@ public enum Event: Equatable, Sendable {
     case powerChanged
     case didWake
     case command(Request)
-    /// Daemon shutdown: turns a cut adapter back on and hands the LED to the system. Leaves the native Charge Limit and settings untouched.
-    /// Send nothing after it except `.start`.
+    /// Daemon shutdown: turns a cut adapter back on and hands the LED to the system. Leaves the native Charge Limit and settings
+    /// untouched. Send nothing after it except `.start`.
     case stop
 }
 

@@ -43,7 +43,7 @@ public final class NativeLimit {
     /// lower value didn't take. Below `powerUIMinimum` while unplugged, `percent` is returned unverified, because the
     /// plug-in applies it; the Engine sets it again on plug-in to check. Throws when PowerUI fails, or
     /// `HardwareError.adapterCut` when the adapter can't be turned back on after a pulse.
-    /// Can block for about 5 s when a pulse is needed.
+    /// Can block for about 5 s when a pulse is needed, and one poll longer after a re-apply.
     public func set(_ percent: Int?) throws -> Int? {
         let reapplying = adapterCut
         // Read before the re-apply disable, which turns the limit off.
@@ -84,7 +84,8 @@ public final class NativeLimit {
         return Self.powerUIMinimum
     }
 
-    /// `afterReapply`: the disable and `setMCL(80)` just went out, so the first read waits one poll, as it could be stale.
+    /// `afterReapply`: the disable and `setMCL(80)` just went out, so the first read waits one poll, as it could be
+    /// stale.
     private func waitUntilApplied(_ percent: Int, afterReapply: Bool) -> Bool {
         var waited: TimeInterval = 0
         if afterReapply {

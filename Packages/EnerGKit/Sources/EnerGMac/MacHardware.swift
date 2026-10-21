@@ -54,9 +54,10 @@ public final class MacHardware: Hardware, LimitControls {
     }
 
     /// Turns `CHIE` back on if the adapter was left cut: a pulse whose re-enable failed, a crash mid-pulse, or an
-    /// older build's Discharge. The next `setChargeLimit` then re-applies the limit so macOS doesn't stay on battery.
-    /// The Engine takes a snapshot on every event (`.start` included), from the same serial context as
-    /// `setChargeLimit`, so this never runs mid-pulse. Never throws.
+    /// older build's Discharge. A cut reading is confirmed by a second read 0.25 s later. The next `setChargeLimit`
+    /// then re-applies the limit so macOS doesn't stay on battery. The Engine takes a snapshot on every event
+    /// (`.start` and `.stop` included), from the same serial context as `setChargeLimit`, so this never runs
+    /// mid-pulse. Never throws.
     private func healAdapter() {
         guard adapterReadsCut() else { return }
         // A read straight after a pulse's re-enable can return the old value: confirm before healing.

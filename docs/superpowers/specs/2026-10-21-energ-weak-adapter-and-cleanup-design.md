@@ -66,8 +66,9 @@ The Weak Adapter warning flickers under a marginal load, and an alarm is the wro
     - A success resets the count.
   - **`adapterCut`, NativeLimit side:** after the throw, the next `set` re-applies (disable first).
   - **Plug-in re-verify:**
-    - Unplugged→plugged with a limit below 80 calls `setChargeLimit` again.
-    - With a limit of 80 or more it doesn't.
+    - Unplugged→plugged after a sub-80 limit set while unplugged calls `setChargeLimit` again, once; a second unplug/plug writes nothing.
+    - A sub-80 limit set while plugged in is not re-set on a later plug-in.
+    - With a limit of 80 or more it doesn't re-set.
     - A clamping fake ends on 80 with `lowLimitUnsupported`.
   - **Limit Drain while charging:** above the limit and charging is reported as `.charging`.
   - **Labels:** see section 2.
