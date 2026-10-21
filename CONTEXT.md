@@ -23,7 +23,7 @@ Temporarily handing charging and the LED back to stock macOS behaviour without q
 _Avoid_: disable, off (ambiguous with **LED Mode** Off)
 
 **Weak Adapter**:
-The state where the adapter is connected and charging is expected, but the battery is still draining because the Mac draws more than the adapter supplies. Never during a **Limit Drain**.
+An adapter rated below 50 W: enough for light work, not for sustained load. Information only; under heavier load the battery covers the shortfall.
 
 ## Relationships
 
