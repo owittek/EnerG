@@ -12,7 +12,7 @@ final class AppModel {
     var helper: SMAppService.Status = HelperInstaller.status
     /// XPC failure; cleared only by an applied successful reply.
     var daemonError: String?
-    /// Install/uninstall/launch-at-login failure; cleared when the user starts any action.
+    /// Install/uninstall/launch-at-login failure, or a change given up on; cleared when the user starts any action.
     var actionError: String? {
         didSet { if actionError == nil { offersUninstallAnyway = false } }
     }
@@ -28,6 +28,8 @@ final class AppModel {
     private var sender: Task<Void, Never>?
     private var settleTimer: Task<Void, Never>?
     private var lastAlDenteScan: ContinuousClock.Instant?
+    /// While `uninstallHelper` runs, clicks are ignored and no queued change is sent, so none lands after `release`.
+    private var uninstalling = false
 
     init() {
         // Launch at login defaults to on, once.
@@ -76,7 +78,8 @@ final class AppModel {
             daemonError = nil
             return
         }
-        guard let token = reconciler.beginPoll() else { return }
+        // Closed meanwhile: a poll now would end the hold on what was shown.
+        guard !Task.isCancelled, let token = reconciler.beginPoll() else { return }
         do {
             let new = try await client.send(.getStatus)
             if reconciler.received(new, for: token, now: .now) { daemonError = nil }
@@ -91,17 +94,19 @@ final class AppModel {
 
     /// A user click: shows the result at once and queues the request; the latest click on a control wins.
     func change(_ request: Request) {
+        guard !uninstalling else { return }
         actionError = nil
         reconciler.want(request, now: .now)
         publish()
         pump()
     }
 
-    /// Sends queued changes one at a time until none is left or a poll is in flight; `refresh` restarts it then.
+    /// Sends queued changes one at a time until none is left, a poll is in flight or an uninstall runs; `refresh`
+    /// restarts it then.
     private func pump() {
         guard sender == nil else { return }
         sender = Task {
-            while let next = reconciler.nextCommand() {
+            while !uninstalling, let next = reconciler.nextCommand() {
                 let (request, token) = next
                 do {
                     let new = try await client.send(request)
@@ -128,7 +133,7 @@ final class AppModel {
         let now = ContinuousClock.now
         let shown = reconciler.displayed(now: now)
         if shown != status { status = shown }
-        waitingForHelper = reconciler.waitingForHelper
+        if reconciler.waitingForHelper != waitingForHelper { waitingForHelper = reconciler.waitingForHelper }
         settleTimer?.cancel()
         guard let deadline = reconciler.settleDeadline, deadline > now else { return }
         settleTimer = Task {
@@ -156,6 +161,9 @@ final class AppModel {
     /// turns the adapter on and hands the LED back; if not, they stay as last set. The native Charge Limit may stay on.
     func uninstallHelper(skipRelease: Bool = false) async {
         actionError = nil
+        // Holds back new and queued changes; one already in flight can't be recalled and may still land.
+        uninstalling = true
+        defer { uninstalling = false }
         // Never unregister a daemon that may still hold the adapter off or the LED forced.
         if !skipRelease, HelperInstaller.status == .enabled {
             do {
@@ -166,6 +174,9 @@ final class AppModel {
                     + "charging back first. If the helper is still running, it restores the adapter and LED "
                     + "as it stops; if not, they may stay as last set. The native Charge Limit may stay on."
                 offersUninstallAnyway = true
+                // Still installed: queued changes resume.
+                uninstalling = false
+                pump()
                 return
             }
         }

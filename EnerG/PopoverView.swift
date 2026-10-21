@@ -340,7 +340,7 @@ private struct Footer: View {
             }
             .onHover { if !$0 { phase = .idle } }
             .background {
-                Button("") { phase = .idle }.keyboardShortcut(.cancelAction).opacity(0)
+                Button("") { phase = .idle }.keyboardShortcut(.cancelAction).opacity(0).accessibilityHidden(true)
             }
         case .uninstalling:
             HStack(spacing: 6) {
