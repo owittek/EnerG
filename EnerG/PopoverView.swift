@@ -136,6 +136,9 @@ private struct BatteryTile: View {
                 Text(status.stateLabel).foregroundStyle(.secondary)
                 Spacer()
             }
+            if model.waitingForHelper {
+                Text("Waiting for helper…").font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Text("Charge Limit")
                 Spacer()
@@ -145,14 +148,8 @@ private struct BatteryTile: View {
             Slider(value: Binding(get: { limit }, set: { draftLimit = $0 }), in: 50...100, step: 5,
                    onEditingChanged: { editing in
                        guard !editing, let draft = draftLimit else { return }
-                       guard Int(draft) != status.settings.chargeLimit else {
-                           draftLimit = nil
-                           return
-                       }
-                       Task {
-                           await model.perform(.setLimit(Int(draft)))
-                           draftLimit = nil
-                       }
+                       draftLimit = nil
+                       if Int(draft) != status.settings.chargeLimit { model.change(.setLimit(Int(draft))) }
                    })
                    .disabled(status.state == .paused || status.isUnavailable(.chargeLimit))
         }
@@ -208,13 +205,13 @@ private struct ControlGrid: View {
                            subtitle: toppingUp ? "Click to stop" : "Once to 100%",
                            isOn: toppingUp, disabled: paused) {
                     guard let current = model.status else { return }
-                    Task { await model.perform(current.toppingUp ? .cancelTopUp : .topUp) }
+                    model.change(current.toppingUp ? .cancelTopUp : .topUp)
                 }
                 ToggleTile(symbol: "pause.fill", title: "Pause",
                            subtitle: paused ? "macOS charging" : "EnerG active",
                            isOn: paused) {
                     guard let current = model.status else { return }
-                    Task { await model.perform(.setPaused(current.state != .paused)) }
+                    model.change(.setPaused(current.state != .paused))
                 }
             }
             GridRow {
@@ -222,7 +219,7 @@ private struct ControlGrid: View {
                            subtitle: status.settings.ledMode.label,
                            isOn: status.settings.ledMode != .off, disabled: status.isUnavailable(.led)) {
                     guard let current = model.status else { return }
-                    Task { await model.perform(.setLEDMode(current.settings.ledMode.next)) }
+                    model.change(.setLEDMode(current.settings.ledMode.next))
                 }
                 ToggleTile(symbol: "power", title: "Launch at Login",
                            subtitle: model.launchAtLogin ? "On" : "Off",

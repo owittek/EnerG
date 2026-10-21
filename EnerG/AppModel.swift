@@ -5,7 +5,10 @@ import EnerGCore
 
 @MainActor @Observable
 final class AppModel {
-    var status: Status?
+    /// What the popover shows: the predicted status while a change settles, else the last reply. nil before the first.
+    private(set) var status: Status?
+    /// A change couldn't reach the helper and is being retried.
+    private(set) var waitingForHelper = false
     var helper: SMAppService.Status = HelperInstaller.status
     /// XPC failure; cleared only by an applied successful reply.
     var daemonError: String?
@@ -19,10 +22,12 @@ final class AppModel {
     var launchAtLogin = HelperInstaller.launchAtLogin
 
     private let client = DaemonClient()
+    private var reconciler = Reconciler()
     private var polling: Task<Void, Never>?
+    /// Sends queued changes; keeps running while the popover is closed.
+    private var sender: Task<Void, Never>?
+    private var settleTimer: Task<Void, Never>?
     private var lastAlDenteScan: ContinuousClock.Instant?
-    private var requestSeq = 0
-    private var appliedSeq = 0
 
     init() {
         // Launch at login defaults to on, once.
@@ -42,7 +47,7 @@ final class AppModel {
         polling = Task {
             while !Task.isCancelled {
                 await refresh()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: reconciler.isSettling(now: .now) ? .milliseconds(500) : .seconds(2))
             }
         }
     }
@@ -50,6 +55,7 @@ final class AppModel {
     func stopPolling() {
         polling?.cancel()
         polling = nil
+        reconciler.closed(now: .now)
     }
 
     func refresh() async {
@@ -65,32 +71,69 @@ final class AppModel {
                 .contains { $0.bundleIdentifier == "com.apphousekitchen.aldente-pro" }
         }
         guard helper == .enabled else {
-            status = nil
+            reconciler.reset()
+            publish()
             daemonError = nil
             return
         }
-        await send(.getStatus)
-    }
-
-    /// User-initiated request: clears the previous action error first.
-    func perform(_ request: Request) async {
-        actionError = nil
-        await send(request)
-    }
-
-    func send(_ request: Request) async {
-        requestSeq += 1
-        let seq = requestSeq
+        guard let token = reconciler.beginPoll() else { return }
         do {
-            let new = try await client.send(request)
-            guard seq > appliedSeq else { return }
-            appliedSeq = seq
-            status = new
-            daemonError = nil
+            let new = try await client.send(.getStatus)
+            if reconciler.received(new, for: token, now: .now) { daemonError = nil }
         } catch {
-            guard seq > appliedSeq else { return }
-            appliedSeq = seq
-            daemonError = "Helper not reachable: \(error.localizedDescription)"
+            if reconciler.failed(token, now: .now) != .stale {
+                daemonError = "Helper not reachable: \(error.localizedDescription)"
+            }
+        }
+        publish()
+        pump()
+    }
+
+    /// A user click: shows the result at once and queues the request; the latest click on a control wins.
+    func change(_ request: Request) {
+        actionError = nil
+        reconciler.want(request, now: .now)
+        publish()
+        pump()
+    }
+
+    /// Sends queued changes one at a time until none is left or a poll is in flight; `refresh` restarts it then.
+    private func pump() {
+        guard sender == nil else { return }
+        sender = Task {
+            while let next = reconciler.nextCommand() {
+                let (request, token) = next
+                do {
+                    let new = try await client.send(request)
+                    if reconciler.received(new, for: token, now: .now) { daemonError = nil }
+                } catch {
+                    switch reconciler.failed(token, now: .now) {
+                    case .retry:
+                        publish()
+                        try? await Task.sleep(for: .seconds(1))
+                    case .gaveUp:
+                        actionError = "Helper not reachable — change not applied."
+                    case .stale:
+                        break
+                    }
+                }
+                publish()
+            }
+            sender = nil
+        }
+    }
+
+    /// Copies what the Reconciler shows, and wakes again at the settle deadline, when that can change on its own.
+    private func publish() {
+        let now = ContinuousClock.now
+        let shown = reconciler.displayed(now: now)
+        if shown != status { status = shown }
+        waitingForHelper = reconciler.waitingForHelper
+        settleTimer?.cancel()
+        guard let deadline = reconciler.settleDeadline, deadline > now else { return }
+        settleTimer = Task {
+            try? await Task.sleep(until: deadline, clock: .continuous)
+            if !Task.isCancelled { publish() }
         }
     }
 
@@ -132,11 +175,10 @@ final class AppModel {
         } catch {
             actionError = "Uninstall failed: \(error.localizedDescription)"
         }
-        // Drop any poll reply still in flight.
-        requestSeq += 1
-        appliedSeq = requestSeq
+        // Drop queued changes and any reply still in flight.
+        reconciler.reset()
         helper = HelperInstaller.status
-        status = nil
+        publish()
     }
 
     /// Looks for a process by executable name across all users. proc_name fails for other users'
