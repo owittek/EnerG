@@ -41,7 +41,8 @@ public final class MacHardware: Hardware, LimitControls {
         let adapterConnected = plugged ?? (p["ExternalConnected"] as? Bool ?? false)
         return BatterySnapshot(
             percent: percent,
-            isCharging: BatterySnapshot.isCharging(chlt: try? read("CHLT", size: 3), adapterConnected: adapterConnected,
+            isCharging: BatterySnapshot.isCharging(chlt: try? read("CHLT", size: 3), percent: percent,
+                                                   adapterConnected: adapterConnected,
                                                    registryIsCharging: p["IsCharging"] as? Bool ?? false),
             adapterConnected: adapterConnected,
             adapterWatts: (adapter?["Watts"] as? NSNumber)?.intValue,
