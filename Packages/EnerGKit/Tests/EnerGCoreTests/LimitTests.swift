@@ -94,6 +94,53 @@ struct LimitTests {
         #expect(status.warnings.contains(.lowLimitUnsupported))
     }
 
+    @Test func theReverifyHappensOncePerUnverifiedSet() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        engine.handle(.command(.setLimit(60)))
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = false
+        engine.handle(.powerChanged)
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
+    }
+
+    @Test func aLimitBelowEightySetWhilePluggedInIsNotResetOnALaterPlugIn() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        engine.handle(.command(.setLimit(60)))
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
+    }
+
+    // Without AC-W the plug reads from ExternalConnected, so a cut adapter flickers as unplugged.
+    @Test func aFlickerAfterTheReverifyWritesNoSecondLimit() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false; $0.snap.plugSensed = false }
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        engine.handle(.command(.setLimit(60)))
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        #expect(hw.writes.filter { $0 == .limit(60) }.count == 1)
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = false
+        engine.handle(.powerChanged)
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
+    }
+
     @Test func pluggingInLeavesALimitOfEightyOrMore() {
         let (engine, hw) = started()
         hw.snap.adapterConnected = false

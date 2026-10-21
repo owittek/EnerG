@@ -25,6 +25,8 @@ public final class Engine {
     private var wakeReassert = false
     /// A write is to be retried: the next event re-asserts everything.
     private var retryNextEvent = false
+    /// The last Charge Limit write was below 80 and made while unplugged, so it was returned unverified.
+    private var limitUnverified = false
 
     public init(hardware: any Hardware, settings: Settings) {
         self.hardware = hardware
@@ -103,6 +105,8 @@ public final class Engine {
             write(.chargeLimit) {
                 effectiveLimit = nil
                 effectiveLimit = try hardware.setChargeLimit(next.chargeLimit)
+                limitUnverified = snapshot?.adapterConnected == false
+                    && (next.chargeLimit ?? NativeLimit.powerUIMinimum) < NativeLimit.powerUIMinimum
             }
         }
         if changed(\.led, to: next) { write(.led) { try hardware.setLED(next.led) } }
@@ -114,11 +118,10 @@ public final class Engine {
     }
 
     /// A limit below 80 set while unplugged was returned unverified; the plug-in applies it, so it is set again to
-    /// check.
+    /// check. Only on the plug-in after such a set: the re-set is made plugged in, so it clears the flag and later
+    /// plug-ins leave the limit alone.
     private func needsReverify(from previous: BatterySnapshot?, to current: BatterySnapshot) -> Bool {
-        guard previous?.adapterConnected == false, current.adapterConnected,
-              let requested = applied?.chargeLimit else { return false }
-        return requested < NativeLimit.powerUIMinimum
+        previous?.adapterConnected == false && current.adapterConnected && limitUnverified
     }
 
     /// A kickstart can't be told apart from a bootout, so the native Charge Limit stays as is.
