@@ -9,14 +9,14 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             if model.helper != .enabled {
                 HelperTile(model: model)
-                ErrorTiles(model: model)
+                ProblemTile(model: model)
             } else if let status = model.status {
                 BatteryTile(status: status, model: model)
                 NoticeTiles(status: status, model: model)
                 ControlGrid(status: status, model: model)
                 PowerFlowTile(status: status)
-            } else if model.daemonError != nil || model.actionError != nil {
-                ErrorTiles(model: model)
+            } else if model.problem != nil {
+                ProblemTile(model: model)
                 Button("Retry") { Task { await model.refresh() } }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 120)
@@ -81,6 +81,8 @@ private struct NoticeTile: View {
     let text: String
     let symbol: String
     let tint: Color
+    /// In progress: a spinner instead of the symbol, and secondary text.
+    var busy = false
     /// Optional button under the text.
     var actionTitle: String?
     var action: () -> Void = {}
@@ -89,12 +91,17 @@ private struct NoticeTile: View {
         Label {
             VStack(alignment: .leading, spacing: 6) {
                 Text(text).font(.callout)
+                    .foregroundStyle(busy ? .secondary : .primary)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                 if let actionTitle { Button(actionTitle, action: action) }
             }
         } icon: {
-            Image(systemName: symbol).foregroundStyle(tint)
+            if busy {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: symbol).foregroundStyle(tint)
+            }
         }
         .tile()
     }
@@ -136,9 +143,6 @@ private struct BatteryTile: View {
                 Text(status.stateLabel).foregroundStyle(.secondary)
                 Spacer()
             }
-            if model.waitingForHelper {
-                Text("Waiting for helper…").font(.caption).foregroundStyle(.secondary)
-            }
             HStack {
                 Text("Charge Limit")
                 Spacer()
@@ -170,21 +174,19 @@ private struct NoticeTiles: View {
             NoticeTile(text: "AlDente (or its helper) is running and may override EnerG.",
                        symbol: "exclamationmark.triangle.fill", tint: .orange)
         }
-        ErrorTiles(model: model)
+        ProblemTile(model: model)
     }
 }
 
-private struct ErrorTiles: View {
+/// The one problem, if any: a spinner while a change is retried, else an error with its button.
+private struct ProblemTile: View {
     let model: AppModel
 
     var body: some View {
-        if let error = model.daemonError {
-            NoticeTile(text: error, symbol: "xmark.octagon.fill", tint: .red)
-        }
-        if let error = model.actionError {
-            NoticeTile(text: error, symbol: "xmark.octagon.fill", tint: .red,
-                       actionTitle: model.offersUninstallAnyway ? "Uninstall Anyway" : nil) {
-                Task { await model.uninstallHelper(skipRelease: true) }
+        if let problem = model.problem {
+            NoticeTile(text: problem.message, symbol: "xmark.octagon.fill", tint: .red, busy: problem.isPending,
+                       actionTitle: problem.action?.title) {
+                if let action = problem.action { model.resolve(action) }
             }
         }
     }

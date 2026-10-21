@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import Observation
 import ServiceManagement
 import EnerGCore
@@ -10,17 +11,20 @@ final class AppModel {
     /// A change couldn't reach the helper and is being retried.
     private(set) var waitingForHelper = false
     var helper: SMAppService.Status = HelperInstaller.status
-    /// XPC failure; cleared only by an applied successful reply.
-    var daemonError: String?
-    /// Install/uninstall/launch-at-login failure, or a change given up on; cleared when the user starts any action.
-    var actionError: String? {
-        didSet { if actionError == nil { offersUninstallAnyway = false } }
+    /// The one problem the popover shows, if anything is wrong.
+    var problem: Problem? {
+        Problem.shown(failure: failure,
+                      connection: waitingForHelper ? .waitingForHelper : unreachable ? .helperUnreachable : nil)
     }
-    /// `release` failed during uninstall: the notice offers to unregister without it.
-    var offersUninstallAnyway = false
     var alDenteRunning = false
     var launchAtLogin = HelperInstaller.launchAtLogin
 
+    private let log = Logger(subsystem: "app.energ", category: "app")
+    /// A failed click or a dropped change; cleared when the user starts any action. A dropped change also clears once
+    /// energd answers again.
+    private var failure: Problem?
+    /// Polls can't reach energd; cleared by an applied reply.
+    private var unreachable = false
     private let client = DaemonClient()
     private var reconciler = Reconciler()
     private var polling: Task<Void, Never>?
@@ -35,9 +39,7 @@ final class AppModel {
         // Launch at login defaults to on, once.
         let key = "launchAtLoginInitialized"
         if !UserDefaults.standard.bool(forKey: key) {
-            do { try HelperInstaller.setLaunchAtLogin(true) } catch {
-                actionError = "Couldn't turn on Launch at Login: \(error.localizedDescription)"
-            }
+            do { try HelperInstaller.setLaunchAtLogin(true) } catch { fail(.launchAtLoginFailed, error) }
             UserDefaults.standard.set(true, forKey: key)
             launchAtLogin = HelperInstaller.launchAtLogin
         }
@@ -75,17 +77,18 @@ final class AppModel {
         guard helper == .enabled else {
             reconciler.reset()
             publish()
-            daemonError = nil
+            unreachable = false
             return
         }
         // Closed meanwhile: a poll now would end the hold on what was shown.
         guard !Task.isCancelled, let token = reconciler.beginPoll() else { return }
         do {
             let new = try await client.send(.getStatus)
-            if reconciler.received(new, for: token, now: .now) { daemonError = nil }
+            if reconciler.received(new, for: token, now: .now) { reached() }
         } catch {
             if reconciler.failed(token, now: .now) != .stale {
-                daemonError = "Helper not reachable: \(error.localizedDescription)"
+                unreachable = true
+                log.error("status poll failed: \(String(describing: error), privacy: .public)")
             }
         }
         publish()
@@ -95,7 +98,7 @@ final class AppModel {
     /// A user click: shows the result at once and queues the request; the latest click on a control wins.
     func change(_ request: Request) {
         guard !uninstalling else { return }
-        actionError = nil
+        failure = nil
         reconciler.want(request, now: .now)
         publish()
         pump()
@@ -110,14 +113,18 @@ final class AppModel {
                 let (request, token) = next
                 do {
                     let new = try await client.send(request)
-                    if reconciler.received(new, for: token, now: .now) { daemonError = nil }
+                    if reconciler.received(new, for: token, now: .now) { reached() }
                 } catch {
+                    log.error("""
+                        \(String(describing: request), privacy: .public) failed: \
+                        \(String(describing: error), privacy: .public)
+                        """)
                     switch reconciler.failed(token, now: .now) {
                     case .retry:
                         publish()
                         try? await Task.sleep(for: .seconds(1))
                     case .gaveUp:
-                        actionError = "Helper not reachable — change not applied."
+                        failure = .changeNotApplied
                     case .stale:
                         break
                     }
@@ -142,15 +149,27 @@ final class AppModel {
         }
     }
 
+    /// Shows `problem` and logs the underlying error, which the popover doesn't show.
+    private func fail(_ problem: Problem, _ error: any Error) {
+        log.error("\(String(describing: problem), privacy: .public): \(String(describing: error), privacy: .public)")
+        failure = problem
+    }
+
+    /// energd answered: it is reachable, so a dropped change no longer needs saying.
+    private func reached() {
+        unreachable = false
+        if failure == .changeNotApplied { failure = nil }
+    }
+
     func installHelper() {
-        actionError = nil
+        failure = nil
         do {
             try HelperInstaller.register()
         } catch {
             // register() throws "Operation not permitted" while the daemon awaits approval in Login Items; that is the normal first-install path, not a failure.
             let current = HelperInstaller.status
             if current != .requiresApproval && current != .enabled {
-                actionError = "Install failed: \(error.localizedDescription)"
+                fail(.installFailed, error)
             }
         }
         helper = HelperInstaller.status
@@ -160,7 +179,7 @@ final class AppModel {
     /// `skipRelease`: "Uninstall Anyway" after a failed release. If energd is still running, its SIGTERM stop
     /// turns the adapter on and hands the LED back; if not, they stay as last set. The native Charge Limit may stay on.
     func uninstallHelper(skipRelease: Bool = false) async {
-        actionError = nil
+        failure = nil
         // Holds back new and queued changes; one already in flight can't be recalled and may still land.
         uninstalling = true
         defer { uninstalling = false }
@@ -169,11 +188,7 @@ final class AppModel {
             do {
                 _ = try await client.send(.release)
             } catch {
-                actionError = "Couldn't release charging control, so the helper wasn't uninstalled: "
-                    + "\(error.localizedDescription). Uninstall Anyway removes the helper without handing "
-                    + "charging back first. If the helper is still running, it restores the adapter and LED "
-                    + "as it stops; if not, they may stay as last set. The native Charge Limit may stay on."
-                offersUninstallAnyway = true
+                fail(.releaseFailed, error)
                 // Still installed: queued changes resume.
                 uninstalling = false
                 pump()
@@ -182,9 +197,9 @@ final class AppModel {
         }
         do {
             try await HelperInstaller.unregister()
-            daemonError = nil
+            unreachable = false
         } catch {
-            actionError = "Uninstall failed: \(error.localizedDescription)"
+            fail(.uninstallFailed, error)
         }
         // Drop queued changes and any reply still in flight.
         reconciler.reset()
@@ -209,8 +224,16 @@ final class AppModel {
     }
 
     func setLaunchAtLogin(_ on: Bool) {
-        actionError = nil
-        do { try HelperInstaller.setLaunchAtLogin(on) } catch { actionError = error.localizedDescription }
+        failure = nil
+        do { try HelperInstaller.setLaunchAtLogin(on) } catch { fail(.launchAtLoginFailed, error) }
         launchAtLogin = HelperInstaller.launchAtLogin
+    }
+
+    /// Runs the button of the problem notice.
+    func resolve(_ action: ProblemAction) {
+        switch action {
+        case .uninstallAnyway: Task { await uninstallHelper(skipRelease: true) }
+        case .openLoginItems: HelperInstaller.openApproval()
+        }
     }
 }
