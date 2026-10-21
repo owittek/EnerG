@@ -24,6 +24,8 @@ final class FakeLimitControls: LimitControls {
     var failingOverride = false
     /// Adapter-on writes that throw before one succeeds.
     var failingEnables = 0
+    /// Adapter-off writes throw.
+    var failingCut = false
     private var pending: Int?
 
     func setMCL(_ percent: Int?) throws {
@@ -49,6 +51,7 @@ final class FakeLimitControls: LimitControls {
     func pluggedIn() -> Bool { plugged }
 
     func setAdapter(enabled: Bool) throws {
+        if !enabled, failingCut { throw HardwareError.io(-1) }
         if enabled, failingEnables > 0 {
             failingEnables -= 1
             throw HardwareError.io(-1)

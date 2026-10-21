@@ -28,7 +28,7 @@ public final class NativeLimit {
     private let controls: any LimitControls
     /// How long to wait, per attempt, for the daemon to push an override to the SMC.
     private let settle: TimeInterval
-    /// `CHIE` was found cut at start: the next `set` disables the limit first, so macOS doesn't stay on battery.
+    /// `CHIE` was found cut: the next `set` disables the limit first, so macOS doesn't stay on battery.
     private var adapterCut = false
 
     public init(controls: any LimitControls, settle: TimeInterval = 2) {
@@ -36,7 +36,7 @@ public final class NativeLimit {
         self.settle = settle
     }
 
-    /// Call once, before the first `set`, when the adapter was found cut (and has been turned back on).
+    /// Call when the adapter was found cut and has been turned back on, never while a `set` is running.
     public func adapterWasCut() { adapterCut = true }
 
     /// Sets the limit; nil disables it. Returns the limit now in effect: `percent`, or `powerUIMinimum` when a
@@ -70,7 +70,8 @@ public final class NativeLimit {
         controls.notifyDefaultsChanged()
         if waitUntilApplied(percent) { return percent }
         guard controls.pluggedIn() else { return percent }
-        try pulse()
+        // A failed cut leaves the override in place but nothing to apply it now.
+        guard try pulse() else { return try fallBack() }
         if waitUntilApplied(percent) { return percent }
         return try fallBack()
     }
@@ -90,18 +91,21 @@ public final class NativeLimit {
         return true
     }
 
-    /// A cut and reconnect reads as a plug event to the smartcharging daemon.
-    private func pulse() throws {
-        try controls.setAdapter(enabled: false)
+    /// A cut and reconnect reads as a plug event to the smartcharging daemon. Returns false when the cut fails
+    /// (the adapter was never cut); throws when the adapter can't be turned back on.
+    private func pulse() throws -> Bool {
+        do { try controls.setAdapter(enabled: false) } catch { return false }
         controls.wait(1)
         // Turning the adapter back on is the safe direction: retry before giving up.
-        for attempt in 1...3 {
+        for _ in 1..<3 {
             do {
                 try controls.setAdapter(enabled: true)
-                return
-            } catch where attempt < 3 {
+                return true
+            } catch {
                 controls.wait(0.5)
             }
         }
+        try controls.setAdapter(enabled: true)
+        return true
     }
 }

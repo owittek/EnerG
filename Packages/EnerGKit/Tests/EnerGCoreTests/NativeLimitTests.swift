@@ -72,11 +72,22 @@ struct NativeLimitTests {
     }
 
     @Test func pulseThrowsWhenTheAdapterStaysCut() {
-        let (limit, _) = make {
+        let (limit, controls) = make {
             $0.daemon = .appliesOnPulse
             $0.failingEnables = 3
         }
         #expect(throws: HardwareError.self) { try limit.set(60) }
+        #expect(controls.calls == [.override(60), .notify, .adapter(false)])
+    }
+
+    // The override is already written; only the pulse is missing, so this is a fallback, not a failure.
+    @Test func aFailedCutFallsBackToEighty() throws {
+        let (limit, controls) = make {
+            $0.daemon = .appliesOnPulse
+            $0.failingCut = true
+        }
+        #expect(try limit.set(60) == 80)
+        #expect(controls.calls == [.override(60), .notify, .setMCL(80)])
     }
 
     // System Settings must never be left holding a value it can't show.
