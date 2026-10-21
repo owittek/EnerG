@@ -90,7 +90,6 @@ public enum ChargeState: String, Codable, Sendable {
 }
 
 public enum Warning: Codable, Hashable, Sendable {
-    case weakAdapter
     /// A Charge Limit below 80 didn't take, so 80 is in effect.
     case lowLimitUnsupported
     case unavailable(Feature)

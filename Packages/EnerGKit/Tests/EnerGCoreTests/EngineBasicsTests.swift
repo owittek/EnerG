@@ -97,7 +97,6 @@ struct EngineBasicsTests {
         let status = engine.handle(.powerChanged)
         #expect(hw.writes == [.led(.system)])
         #expect(status.state == .onBattery)
-        #expect(!status.warnings.contains(.weakAdapter))
     }
 
     @Test func ledModeOffAndBack() {

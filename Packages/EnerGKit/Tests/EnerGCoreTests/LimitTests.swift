@@ -56,36 +56,15 @@ struct LimitTests {
         #expect(engine.handle(.command(.setPaused(true))).effectiveLimit == nil)
     }
 
-    // Above the limit macOS runs the Mac from the battery itself; that is no Weak Adapter.
-    @Test func aboveTheLimitIsLimitDrainNotWeakAdapter() {
+    // Above the limit macOS runs the Mac from the battery itself.
+    @Test func aboveTheLimitIsLimitDrain() {
         let (engine, hw) = started()
         hw.snap.percent = 83
         hw.snap.isCharging = false
         hw.snap.batteryWatts = -11
-        var status = engine.handle(.tick)
+        let status = engine.handle(.tick)
         #expect(status.state == .limitDrain)
         #expect(hw.writes == [.led(.green)])
-        status = engine.handle(.tick)
-        #expect(!status.warnings.contains(.weakAdapter))
-    }
-
-    @Test func weakAdapterAtTheLimitCounts() {
-        let (engine, hw) = started()
-        hw.snap.percent = 80
-        hw.snap.isCharging = false
-        hw.snap.batteryWatts = -5
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
-        let status = engine.handle(.tick)
-        #expect(status.warnings.contains(.weakAdapter))
-        #expect(status.state == .atLimit)
-    }
-
-    @Test func weakAdapterCountsAtAnyPercentWithoutALimit() {
-        let (engine, hw) = started(Settings(chargeLimit: 100))
-        hw.snap.percent = 92
-        hw.snap.batteryWatts = -5
-        engine.handle(.tick)
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
     }
 
     @Test func limitDrainFollowsTheEffectiveLimit() {

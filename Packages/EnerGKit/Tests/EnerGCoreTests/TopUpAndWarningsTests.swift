@@ -45,36 +45,6 @@ struct TopUpAndWarningsTests {
         #expect(!status.toppingUp)
     }
 
-    @Test func weakAdapterNeedsTwoConsecutiveDrainingSamples() {
-        let (engine, hw) = started()
-        hw.snap.batteryWatts = -5
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
-        hw.snap.batteryWatts = 3
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
-    }
-
-    @Test func weakAdapterCountsOnlyTicks() {
-        let (engine, hw) = started()
-        hw.snap.batteryWatts = -5
-        engine.handle(.tick)
-        #expect(!engine.handle(.command(.getStatus)).warnings.contains(.weakAdapter))
-        #expect(!engine.handle(.didWake).warnings.contains(.weakAdapter))
-        #expect(!engine.handle(.powerChanged).warnings.contains(.weakAdapter))
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
-    }
-
-    @Test func interleavedChargingSampleResetsWeakCount() {
-        let (engine, hw) = started()
-        hw.snap.batteryWatts = -5
-        engine.handle(.tick)
-        hw.snap.batteryWatts = 3
-        engine.handle(.tick)
-        hw.snap.batteryWatts = -5
-        #expect(!engine.handle(.tick).warnings.contains(.weakAdapter))
-        #expect(engine.handle(.tick).warnings.contains(.weakAdapter))
-    }
-
     @Test func failedLEDWriteDisablesOnlyLED() {
         let (engine, hw) = started { $0.failing = [.led] }
         var status = engine.handle(.command(.setLEDMode(.off)))

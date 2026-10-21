@@ -27,7 +27,7 @@ struct ProtocolTests {
                                       adapterWatts: 96, batteryWatts: -12.5, systemWatts: nil),
             effectiveLimit: 80,
             toppingUp: true,
-            warnings: [.weakAdapter, .lowLimitUnsupported, .unavailable(.led), .batteryUnreadable]
+            warnings: [.lowLimitUnsupported, .unavailable(.led), .batteryUnreadable]
         )
         let data = try JSONEncoder().encode(status)
         #expect(try JSONDecoder().decode(Status.self, from: data) == status)

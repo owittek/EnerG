@@ -49,7 +49,7 @@ public final class Engine {
         case .command(let request):
             perform(request)
         }
-        evaluate(countsWeakSample: event == .tick)
+        evaluate()
         wakeReassert = false
         return status()
     }
@@ -78,7 +78,7 @@ public final class Engine {
     /// Pause, or released before uninstall.
     private var paused: Bool { Policy.isPaused(settings, session) }
 
-    private func evaluate(countsWeakSample: Bool) {
+    private func evaluate() {
         do {
             snapshot = try hardware.snapshot()
         } catch {
@@ -91,7 +91,7 @@ public final class Engine {
             return
         }
         let current = snapshot!
-        Policy.update(settings: settings, snapshot: current, effectiveLimit: effectiveLimit, countsWeakSample: countsWeakSample, session: &session)
+        Policy.update(settings: settings, snapshot: current, session: &session)
         apply(Policy.actuation(settings: settings, snapshot: current, session: session))
     }
 
@@ -137,7 +137,6 @@ public final class Engine {
 
     private func status() -> Status {
         var warnings: [Warning] = []
-        if session.weakSamples >= 2 { warnings.append(.weakAdapter) }
         if let effective = effectiveLimit, let requested = applied?.chargeLimit, effective > requested {
             warnings.append(.lowLimitUnsupported)
         }
