@@ -116,7 +116,9 @@ private struct HelperTile: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Helper required", systemImage: "lock.shield").font(.headline)
             if model.helper == .requiresApproval {
-                Text("Allow EnerG in System Settings → General → Login Items.").font(.callout)
+                Text("Allow EnerG in System Settings → General → Login Items, under Background App Activity.")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Open Login Items") { HelperInstaller.openApproval() }
             } else {
                 Text("EnerG needs a privileged helper to control charging.").font(.callout)

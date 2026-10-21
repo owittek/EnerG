@@ -33,7 +33,7 @@ Use your Team ID (the OU field of your Apple Development certificate, shown in X
 
 Contributors: `project.yml` commits the author's team (`XG5GU82KF7`). Replace it with your own team ID; signing fails with someone else's.
 
-On first launch, click **Install Helper** and allow EnerG under System Settings → General → Login Items.
+On first launch, click **Install Helper** and allow EnerG under System Settings → General → Login Items → Background App Activity.
 
 ## Test
 
