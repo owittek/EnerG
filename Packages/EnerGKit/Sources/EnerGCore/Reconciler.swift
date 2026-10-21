@@ -45,6 +45,8 @@ public struct Reconciler {
         let baseline: Status
         /// When nothing was left to send; nil while something is.
         var drainedAt: ContinuousClock.Instant? = nil
+        /// A Pause, Charge Limit or Top Up request was sent, so replies may carry a stale charging state.
+        var chargeWritten = false
     }
 
     private var confirmed: Status?
@@ -55,7 +57,7 @@ public struct Reconciler {
     /// Tokens up to this one are from before the last `reset`.
     private var resetSeq = 0
     private var settle: Settle?
-    /// Shown from `closed` until a poll sent after it answers.
+    /// Shown from `closed` until a poll sent after it answers, a click or giving up.
     private var frozen: Status?
     private var closedSeq = 0
 
@@ -75,6 +77,7 @@ public struct Reconciler {
         case .setLEDMode(let mode): wants.led = mode
         case .getStatus, .release: return
         }
+        frozen = nil
         if settle.map({ expired($0, now) }) ?? true { settle = Settle(baseline: confirmed) }
         prune()
         updateSettle(now)
@@ -87,6 +90,7 @@ public struct Reconciler {
             guard let request = request(for: field, confirmed) else { continue }
             let token = issue(isPoll: false)
             inFlight = InFlight(token: token, sent: (field, request))
+            if field != .led { settle?.chargeWritten = true }
             return (request, token)
         }
         return nil
@@ -112,6 +116,8 @@ public struct Reconciler {
         if let sent = own?.sent, request(for: sent.field, status) == sent.request { clear(sent.field) }
         if token.isPoll, token.seq > closedSeq { frozen = nil }
         prune()
+        // A want kept through a failure (e.g. Resume after a failed Pause) is sent again: show it as a prediction.
+        if hasPendingChange, settle.map({ expired($0, now) }) ?? true { settle = Settle(baseline: status) }
         updateSettle(now)
         return true
     }
@@ -132,6 +138,7 @@ public struct Reconciler {
         guard first.duration(to: now) >= Self.retryWindow else { return .retry }
         wants = Wants()
         settle = nil
+        frozen = nil
         firstFailure = nil
         return .gaveUp
     }
@@ -140,7 +147,7 @@ public struct Reconciler {
     public var waitingForHelper: Bool { firstFailure != nil && hasPendingChange }
 
     /// What the popover shows: the prediction while a change settles, else the confirmed status; from `closed` until
-    /// a poll sent after it answers, what was shown at `closed`. nil before the first status.
+    /// a poll sent after it answers, a click or giving up, what was shown at `closed`. nil before the first status.
     public func displayed(now: ContinuousClock.Instant) -> Status? {
         if let frozen { return frozen }
         guard let confirmed else { return nil }
@@ -158,7 +165,7 @@ public struct Reconciler {
     public var settleDeadline: ContinuousClock.Instant? { settle?.drainedAt.map { $0 + Self.settleCap } }
 
     /// The popover closed: keep showing what it showed until a poll sent after this answers, since replies arriving
-    /// meanwhile may be stale.
+    /// meanwhile may be stale. A click or giving up ends it sooner.
     public mutating func closed(now: ContinuousClock.Instant) {
         frozen = displayed(now: now)
         closedSeq = seq
@@ -208,8 +215,9 @@ public struct Reconciler {
         self.settle = agrees || expired(settle, now) ? nil : settle
     }
 
-    /// The confirmed status with the wanted settings applied. The charge state is re-derived only when Pause, the
-    /// Charge Limit or Top Up differ from the confirmed status or from the baseline; otherwise it stays as reported.
+    /// The confirmed status with the wanted settings applied. The charge state is re-derived once a Pause, Charge
+    /// Limit or Top Up request has been sent, or while they differ from the confirmed status or the baseline; otherwise
+    /// it stays as reported.
     private func prediction(_ confirmed: Status, _ settle: Settle) -> Status {
         var settings = confirmed.settings
         settings.paused = wants.paused ?? (confirmed.state == .paused)
@@ -218,7 +226,8 @@ public struct Reconciler {
         let toppingUp = wants.topUp ?? confirmed.toppingUp
         let wanted = (settings.paused, settings.chargeLimit, toppingUp)
         let base = settle.baseline
-        if wanted == (confirmed.state == .paused, confirmed.settings.chargeLimit, confirmed.toppingUp),
+        if !settle.chargeWritten,
+           wanted == (confirmed.state == .paused, confirmed.settings.chargeLimit, confirmed.toppingUp),
            wanted == (base.state == .paused, base.settings.chargeLimit, base.toppingUp) {
             var shown = confirmed
             shown.settings.ledMode = settings.ledMode

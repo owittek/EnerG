@@ -308,4 +308,80 @@ struct ReconcilerDisplayTests {
         #expect(r.displayed(now: at(10))?.stateLabel == "Holding at 80%")
         #expect(!r.isSettling(now: at(10)))
     }
+
+    @Test func pauseThenResumeInFlightHidesTheStaleChargingReply() {
+        var r = ready(reported(percent: 85))
+        r.want(.setPaused(true), now: at(0))
+        let (_, pause) = r.nextCommand()!
+        r.want(.setPaused(false), now: at(0.1))
+        r.received(reported(Settings(paused: true), percent: 85), for: pause, now: at(0.3))
+        let (_, resume) = r.nextCommand()!
+        r.received(reported(percent: 85, charging: true), for: resume, now: at(0.6))
+        #expect(r.displayed(now: at(0.7))?.stateLabel == "Draining to 80%")
+        #expect(r.isSettling(now: at(0.7)))
+        let poll = r.beginPoll()!
+        r.received(reported(percent: 85), for: poll, now: at(2))
+        #expect(!r.isSettling(now: at(2)))
+        #expect(r.displayed(now: at(2))?.stateLabel == "Draining to 80%")
+    }
+
+    @Test func topUpThenStopInFlightHidesTheStaleChargingReply() {
+        var r = ready(reported(percent: 85))
+        r.want(.topUp, now: at(0))
+        let (_, topUp) = r.nextCommand()!
+        r.want(.cancelTopUp, now: at(0.1))
+        r.received(reported(percent: 85, charging: true, toppingUp: true), for: topUp, now: at(0.3))
+        let (stop, token) = r.nextCommand()!
+        #expect(stop == .cancelTopUp)
+        r.received(reported(percent: 85, charging: true), for: token, now: at(0.6))
+        #expect(r.displayed(now: at(0.7))?.stateLabel == "Draining to 80%")
+        #expect(r.isSettling(now: at(0.7)))
+        let poll = r.beginPoll()!
+        r.received(reported(percent: 85), for: poll, now: at(2))
+        #expect(!r.isSettling(now: at(2)))
+    }
+
+    @Test func givingUpWhileClosedShowsTheTruth() {
+        var r = ready(reported(percent: 80))
+        r.want(.setPaused(true), now: at(0))
+        let (_, first) = r.nextCommand()!
+        _ = r.failed(first, now: at(0))
+        r.closed(now: at(0.5))
+        for second in 1..<10 {
+            let (_, token) = r.nextCommand()!
+            _ = r.failed(token, now: at(Double(second)))
+        }
+        let (_, last) = r.nextCommand()!
+        let outcome = r.failed(last, now: at(10))
+        #expect(outcome == .gaveUp)
+        #expect(r.displayed(now: at(10))?.stateLabel == "Holding at 80%")
+    }
+
+    @Test func aClickAfterReopeningShowsAtOnce() {
+        var r = pausedAt(85)
+        r.want(.setPaused(false), now: at(0))
+        let (_, token) = r.nextCommand()!
+        r.closed(now: at(0.2))
+        let blockedPoll = r.beginPoll()
+        #expect(blockedPoll == nil)
+        r.want(.setPaused(true), now: at(1))
+        #expect(r.displayed(now: at(1))?.state == .paused)
+        r.received(reported(percent: 85, charging: true), for: token, now: at(2))
+        let next = r.nextCommand()?.0
+        #expect(next == .setPaused(true))
+    }
+
+    @Test func aCancelBackResendShowsThePrediction() {
+        var r = ready(reported(percent: 80))
+        r.want(.setPaused(true), now: at(0))
+        let (_, token) = r.nextCommand()!
+        r.want(.setPaused(false), now: at(0.1))
+        _ = r.failed(token, now: at(0.2))
+        let poll = r.beginPoll()!
+        r.received(reported(Settings(paused: true), percent: 80), for: poll, now: at(1))
+        #expect(r.displayed(now: at(1))?.stateLabel == "Holding at 80%")
+        #expect(r.isSettling(now: at(1)))
+        let resume = r.nextCommand()?.0
+        #expect(resume == .setPaused(false))
+    }
 }
