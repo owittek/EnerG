@@ -49,7 +49,6 @@ Notes:
 - **LED without MagSafe:** `ACLC` writes succeed with USB-C only, with no visible effect. So there is no false "LED unavailable".
 - **Registry cadence:** the `AppleSmartBattery` registry refreshes about every 60 s (`UpdateTime`), on AC and on battery. The 2026-10-20 probe saw `UpdateTime` lag 50 s on AC too. While `CHIE` cuts the adapter, `InstantAmperage` keeps the last pre-cut value for up to a minute. `PSTR` (SMC) is live.
 - **Live battery power:** `B0AC` (si16 mA) and `B0AV` (ui16 mV), little-endian, are readable unprivileged and live. Their product tracks `PSTR` while cut. `PPBR` isn't battery power.
-- **Sub-80 lowering at a steady % (2026-10-21, Mac17,8):** with the battery holding at 76 (`CHLT`=4c0505), writing 72 and posting the notification applied it right away (`CHLT`=480503, Limit Drain started). No % tick or pulse was needed. A `CHIE` pulse (08, ~1 s, 00) while draining above the new limit kept "AC Power" throughout and left `CHLT` and the drain unchanged. No stuck state.
 - **Limit Drain:**
   - With the adapter attached and the battery above the native limit, macOS reports "AC Power", yet the battery supplies the whole system draw: `B0AC` × `B0AV` ≈ −`PSTR`, and the adapter is idle.
   - It stops in the same sample in which the *displayed* % reaches the limit. Battery current then reads 0, and AC holds at the limit for hours, with no overshoot.
@@ -63,6 +62,7 @@ Notes:
   - The daemon pushes the value to `CHLT` only on its next displayed-% change or plug event. While the % is steady, a `CHIE` pulse (`08`, ~1–3 s, `00`) serves as the plug event; raising 70 → 72 worked that way.
   - Verified: 70 was applied, the Limit Drain reached 70 and held 3 h on AC with battery current 0. 74 and 66 applied on a notify followed by a % tick.
   - No chime or visible effect on the pulse.
+  - Lowering at a steady % (2026-10-21, Mac17,8): from 76 (`CHLT`=4c0505), writing 72 and posting the notification applied it right away (`CHLT`=480503, Limit Drain started), with no % tick or pulse. A `CHIE` pulse while draining above the new limit kept "AC Power" and left `CHLT` and the drain unchanged: no stuck state.
   - `enableMCL:` resets the value to 80.
 - **AlDente 1.39.4** uses the same mechanism (from its binary's strings: PowerUI 80…100 check, "PreferencesBackend", `mclLimitValue`, "pulsing discharge key").
 

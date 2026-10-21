@@ -34,8 +34,8 @@ final class EngineHost: @unchecked Sendable {
         queue.sync {}
     }
 
-    /// Hands the LED back to macOS, then exits. Runs on the engine
-    /// queue so no XPC or IOKit event can re-apply state between the stop and the exit.
+    /// Hands the LED back to macOS, then exits. Runs on the engine queue so no XPC or IOKit event can re-apply
+    /// state between the stop and the exit.
     func shutdown(exitCode: Int32) -> Never {
         queue.sync {
             engine.handle(.stop)

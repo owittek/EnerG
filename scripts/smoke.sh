@@ -2,6 +2,8 @@
 # On-device check of MacHardware. Build first as your user:
 #   swift build --package-path Packages/EnerGKit --product energ-smoke
 # Then: sudo scripts/smoke.sh     (quit AlDente first; watch the MagSafe LED)
+# Suspend energd first, or its adapter heal undoes `adapter off`:
+#   sudo launchctl kill SIGSTOP system/app.energ.energd     (afterwards: SIGCONT)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
@@ -14,7 +16,14 @@ restore() {
   echo "== restore (limit $ORIG)"
   S adapter on
   S led system
-  if [ "$ORIG" = off ]; then S limit off; else S limit "$ORIG"; fi
+  if [ "$ORIG" = off ]; then
+    S limit off
+  elif [ "$ORIG" -lt 50 ]; then
+    echo "original limit $ORIG is below energ-smoke's 50...100; restoring 50"
+    S limit 50
+  else
+    S limit "$ORIG"
+  fi
   S get-limit
 }
 trap restore EXIT
