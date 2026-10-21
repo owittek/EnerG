@@ -2,6 +2,8 @@
 
 A menu bar app that stops your MacBook's battery from sitting at 100%. Set a Charge Limit. Once the battery reaches it, the Mac runs from the adapter and the battery stays where it is.
 
+<img src="EnerG.avif" alt="The EnerG popover" width="386">
+
 - **Charge Limit:** 50–100% in steps of 5. 100 means no limit.
 - **Top Up:** charge to 100% once, e.g. before a trip. Ends when you unplug or stop it.
 - **Pause:** hand charging and the LED back to macOS without quitting.
