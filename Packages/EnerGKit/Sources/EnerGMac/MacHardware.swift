@@ -58,11 +58,19 @@ public final class MacHardware: Hardware, LimitControls {
     /// The Engine takes a snapshot on every event (`.start` included), from the same serial context as
     /// `setChargeLimit`, so this never runs mid-pulse. Never throws.
     private func healAdapter() {
-        guard let chie = try? read("CHIE", size: 1), chie[0] != 0x00 else { return }
+        guard adapterReadsCut() else { return }
+        // A read straight after a pulse's re-enable can return the old value: confirm before healing.
+        wait(0.25)
+        guard adapterReadsCut() else { return }
         do { try setAdapter(enabled: true) } catch {
             log.error("adapter re-enable failed: \(String(describing: error), privacy: .public)")
         }
         nativeLimit.adapterWasCut()
+    }
+
+    private func adapterReadsCut() -> Bool {
+        guard let chie = try? read("CHIE", size: 1) else { return false }
+        return chie[0] != 0x00
     }
 
     // MARK: - LimitControls
