@@ -246,7 +246,7 @@ private struct PowerFlowTile: View {
     var body: some View {
         if let snapshot = status.snapshot {
             HStack(spacing: 6) {
-                node("powerplug.fill", adapterText(snapshot))
+                node("powerplug.fill", status.adapterLabel)
                 Image(systemName: "arrow.right")
                     .foregroundStyle(adapterFlowing(snapshot) ? .primary : .tertiary)
                 node("laptopcomputer", snapshot.systemWatts.map { String(format: "%.0f W", $0) } ?? "—")
@@ -270,12 +270,6 @@ private struct PowerFlowTile: View {
     /// During a Limit Drain the adapter is attached but idle: macOS runs the Mac from the battery.
     private func adapterFlowing(_ snapshot: BatterySnapshot) -> Bool {
         snapshot.adapterConnected && status.state != .limitDrain
-    }
-
-    private func adapterText(_ snapshot: BatterySnapshot) -> String {
-        guard snapshot.adapterConnected else { return "Unplugged" }
-        let rated = snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
-        return status.state == .limitDrain ? "\(rated) · idle" : rated
     }
 
     /// Mac → battery while charging, battery → Mac while draining.
@@ -307,37 +301,6 @@ private struct Footer: View {
 extension Status {
     /// The Engine stopped writing this Feature after a failed hardware write.
     func isUnavailable(_ feature: Feature) -> Bool { warnings.contains(.unavailable(feature)) }
-}
-
-extension Status {
-    /// The state line under the battery %. "At limit" covers the firmware band below the limit too,
-    /// where macOS doesn't charge until the battery drops 5 points under it.
-    var stateLabel: String {
-        switch state {
-        case .limitDrain:
-            return effectiveLimit.map { "Draining to \($0)%" } ?? state.label
-        case .atLimit:
-            guard let limit = effectiveLimit, let percent = snapshot?.percent else { return "Not charging" }
-            if percent >= limit { return "Holding at \(limit)%" }
-            return percent >= limit - 5 ? "Not charging · resumes below \(limit - 5)%" : "Not charging"
-        default:
-            return state.label
-        }
-    }
-}
-
-extension ChargeState {
-    var label: String {
-        switch self {
-        case .charging: "Charging"
-        case .atLimit: "Holding at limit"
-        case .limitDrain: "Draining to limit"
-        case .toppingUp: "Topping up to 100%"
-        case .paused: "Paused"
-        case .onBattery: "On battery"
-        case .unknown: "Battery unreadable"
-        }
-    }
 }
 
 extension Warning {
