@@ -15,7 +15,7 @@ final class FakeHardware: Hardware {
     /// Non-nil limit writes that throw `adapterCut` before one succeeds.
     var adapterCuts = 0
     var snapshotFails = false
-    /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override.
+    /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override (once plugged in).
     var acceptsBelow80 = true
 
     func snapshot() throws -> BatterySnapshot {
@@ -31,7 +31,8 @@ final class FakeHardware: Hardware {
             throw HardwareError.adapterCut
         }
         writes.append(.limit(percent))
-        if let percent, percent < 80, !acceptsBelow80 { return 80 }
+        // Unplugged, the real NativeLimit returns a value below 80 unverified: only the plug-in applies it.
+        if let percent, percent < 80, !acceptsBelow80, snap.adapterConnected { return 80 }
         return percent
     }
 

@@ -41,8 +41,8 @@ public final class NativeLimit {
 
     /// Sets the limit; nil disables it. Returns the limit now in effect: `percent`, or `powerUIMinimum` when a
     /// lower value didn't take. Below `powerUIMinimum` while unplugged, `percent` is returned unverified, because the
-    /// plug-in applies it. Throws when PowerUI fails, or `HardwareError.adapterCut` when the adapter can't be turned
-    /// back on after a pulse.
+    /// plug-in applies it; the Engine sets it again on plug-in to check. Throws when PowerUI fails, or
+    /// `HardwareError.adapterCut` when the adapter can't be turned back on after a pulse.
     /// Can block for about 5 s when a pulse is needed.
     public func set(_ percent: Int?) throws -> Int? {
         let reapplying = adapterCut

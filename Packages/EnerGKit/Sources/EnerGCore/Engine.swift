@@ -79,6 +79,7 @@ public final class Engine {
     private var paused: Bool { Policy.isPaused(settings, session) }
 
     private func evaluate() {
+        let previous = snapshot
         do {
             snapshot = try hardware.snapshot()
         } catch {
@@ -92,11 +93,13 @@ public final class Engine {
         }
         let current = snapshot!
         Policy.update(settings: settings, snapshot: current, session: &session)
-        apply(Policy.actuation(settings: settings, snapshot: current, session: session))
+        apply(Policy.actuation(settings: settings, snapshot: current, session: session),
+              reverifyLimit: needsReverify(from: previous, to: current))
     }
 
-    private func apply(_ next: Actuation) {
-        if changed(\.chargeLimit, to: next) {
+    /// `reverifyLimit`: write the Charge Limit even if it is unchanged.
+    private func apply(_ next: Actuation, reverifyLimit: Bool = false) {
+        if reverifyLimit || changed(\.chargeLimit, to: next) {
             write(.chargeLimit) {
                 effectiveLimit = nil
                 effectiveLimit = try hardware.setChargeLimit(next.chargeLimit)
@@ -108,6 +111,14 @@ public final class Engine {
             applied = nil
             retryNextEvent = false
         }
+    }
+
+    /// A limit below 80 set while unplugged was returned unverified; the plug-in applies it, so it is set again to
+    /// check.
+    private func needsReverify(from previous: BatterySnapshot?, to current: BatterySnapshot) -> Bool {
+        guard previous?.adapterConnected == false, current.adapterConnected,
+              let requested = applied?.chargeLimit else { return false }
+        return requested < NativeLimit.powerUIMinimum
     }
 
     /// A kickstart can't be told apart from a bootout, so the native Charge Limit stays as is.

@@ -79,6 +79,32 @@ struct LimitTests {
         #expect(!status.warnings.contains(.lowLimitUnsupported))
     }
 
+    // Set while unplugged, a limit below 80 is unverified; the plug-in re-sets it, so a clamping macOS shows 80.
+    @Test func pluggingInReverifiesALimitBelowEighty() {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        #expect(engine.handle(.command(.setLimit(60))).effectiveLimit == 60)
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = true
+        let status = engine.handle(.powerChanged)
+        #expect(hw.writes.contains(.limit(60)))
+        #expect(status.effectiveLimit == 80)
+        #expect(status.warnings.contains(.lowLimitUnsupported))
+    }
+
+    @Test func pluggingInLeavesALimitOfEightyOrMore() {
+        let (engine, hw) = started()
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        engine.handle(.powerChanged)
+        hw.writes.removeAll()
+        hw.snap.adapterConnected = true
+        engine.handle(.powerChanged)
+        #expect(!hw.writes.contains(.limit(80)))
+    }
+
     @Test func noEffectiveLimitWhenTheLimitIsUnavailable() {
         let (engine, _) = started { $0.failing = [.chargeLimit] }
         let status = engine.handle(.command(.setLimit(60)))
