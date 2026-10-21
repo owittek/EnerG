@@ -151,7 +151,7 @@ public final class Engine {
         guard let snapshot else { return .unknown }
         if session.toppingUp { return .toppingUp }
         if !snapshot.adapterConnected { return .onBattery }
-        if let limit = effectiveLimit, snapshot.percent > limit { return .limitDrain }
+        if let limit = effectiveLimit, snapshot.percent > limit, !snapshot.isCharging { return .limitDrain }
         return snapshot.isCharging ? .charging : .atLimit
     }
 }

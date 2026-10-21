@@ -67,6 +67,14 @@ struct LimitTests {
         #expect(hw.writes == [.led(.green)])
     }
 
+    // Right after the limit is lowered macOS still reports charging for a moment; that isn't a Limit Drain yet.
+    @Test func aboveTheLimitWhileStillChargingIsCharging() {
+        let (engine, hw) = started()
+        hw.snap.percent = 83
+        hw.snap.isCharging = true
+        #expect(engine.handle(.tick).state == .charging)
+    }
+
     @Test func limitDrainFollowsTheEffectiveLimit() {
         let (engine, hw) = started { $0.acceptsBelow80 = false }
         engine.handle(.command(.setLimit(60)))   // falls back: 80 in effect
