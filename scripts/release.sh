@@ -23,11 +23,12 @@ if [[ $PUBLISH == 1 ]]; then
 fi
 
 xcodegen generate
+rm -rf build/Build  # no stale Debug/incremental products
 mkdir -p build
 LOG=build/release.log
 if ! xcodebuild -project EnerG.xcodeproj -scheme EnerG -configuration Release \
   -derivedDataPath build -allowProvisioningUpdates \
-  OTHER_CODE_SIGN_FLAGS=--timestamp build >"$LOG" 2>&1; then
+  OTHER_CODE_SIGN_FLAGS=--timestamp CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO build >"$LOG" 2>&1; then
   grep -E "error:" "$LOG" | head -20 || true
   echo "xcodebuild failed; full log: $LOG"
   exit 1
@@ -39,6 +40,7 @@ for BIN in "$APP" "$APP/Contents/MacOS/energd"; do
   INFO=$(codesign -dv "$BIN" 2>&1)
   grep -qx "TeamIdentifier=$TEAM" <<<"$INFO" || { echo "$BIN is not signed by team $TEAM"; exit 1; }
   grep -q "^Timestamp=" <<<"$INFO" || { echo "$BIN has no secure timestamp"; exit 1; }
+  ! codesign -d --entitlements - "$BIN" 2>&1 | grep -q get-task-allow || { echo "$BIN has get-task-allow"; exit 1; }
 done
 
 ZIP=build/EnerG.zip
