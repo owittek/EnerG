@@ -275,19 +275,85 @@ private struct PowerFlowTile: View {
     }
 }
 
+/// Borderless footer button with a subtle highlight on hover or press.
+private struct FooterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Hoverable(configuration: configuration)
+    }
+
+    private struct Hoverable: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(hovering || configuration.isPressed ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                            in: .rect(cornerRadius: 6))
+                .contentShape(.rect)
+                .onHover { hovering = $0 }
+        }
+    }
+}
+
 private struct Footer: View {
     let model: AppModel
+    @State private var phase = Phase.idle
+
+    /// `armed`: first click done; a second click uninstalls. Reverts after 3 s, on Esc or when the mouse leaves.
+    private enum Phase { case idle, armed, uninstalling }
+
+    private var canUninstall: Bool { model.helper == .enabled || model.helper == .requiresApproval }
 
     var body: some View {
         HStack {
-            Button("Uninstall Helper") { Task { await model.uninstallHelper() } }
-                .disabled(model.helper != .enabled && model.helper != .requiresApproval)
+            if canUninstall { uninstall }
             Spacer()
-            Button("Quit EnerG") { NSApplication.shared.terminate(nil) }
+            Button { NSApplication.shared.terminate(nil) } label: {
+                HStack(spacing: 6) {
+                    Label("Quit EnerG", systemImage: "power")
+                    Text("⌘Q").foregroundStyle(.secondary)
+                }
+            }
+            .keyboardShortcut("q")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(FooterButtonStyle())
         .font(.callout)
-        .padding(.horizontal, 4)
+        .task(id: phase) {
+            guard phase == .armed else { return }
+            try? await Task.sleep(for: .seconds(3))
+            if !Task.isCancelled, phase == .armed { phase = .idle }
+        }
+    }
+
+    @ViewBuilder private var uninstall: some View {
+        switch phase {
+        case .idle:
+            Button { phase = .armed } label: { Label("Uninstall Helper", systemImage: "trash") }
+        case .armed:
+            Button {
+                phase = .uninstalling
+                Task {
+                    await model.uninstallHelper()
+                    phase = .idle
+                }
+            } label: {
+                Label("Confirm Uninstall", systemImage: "trash").foregroundStyle(.red)
+            }
+            .onHover { if !$0 { phase = .idle } }
+            .background {
+                Button("") { phase = .idle }.keyboardShortcut(.cancelAction).opacity(0)
+            }
+        case .uninstalling:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Uninstalling…")
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+        }
     }
 }
 
