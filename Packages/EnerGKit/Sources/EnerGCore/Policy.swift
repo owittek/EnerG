@@ -49,3 +49,15 @@ enum Policy {
         return snapshot.isCharging ? .orange : .green
     }
 }
+
+extension ChargeState {
+    /// The Engine's state rule; `Status.predicted` uses it too, so a prediction can't drift from what energd reports.
+    static func derive(paused: Bool, toppingUp: Bool, snapshot: BatterySnapshot?, effectiveLimit: Int?) -> ChargeState {
+        if paused { return .paused }
+        guard let snapshot else { return .unknown }
+        if toppingUp { return .toppingUp }
+        if !snapshot.adapterConnected { return .onBattery }
+        if let limit = effectiveLimit, snapshot.percent > limit, !snapshot.isCharging { return .limitDrain }
+        return snapshot.isCharging ? .charging : .atLimit
+    }
+}

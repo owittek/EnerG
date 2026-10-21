@@ -170,11 +170,6 @@ public final class Engine {
     }
 
     private func state() -> ChargeState {
-        if paused { return .paused }
-        guard let snapshot else { return .unknown }
-        if session.toppingUp { return .toppingUp }
-        if !snapshot.adapterConnected { return .onBattery }
-        if let limit = effectiveLimit, snapshot.percent > limit, !snapshot.isCharging { return .limitDrain }
-        return snapshot.isCharging ? .charging : .atLimit
+        .derive(paused: paused, toppingUp: session.toppingUp, snapshot: snapshot, effectiveLimit: effectiveLimit)
     }
 }
