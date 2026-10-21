@@ -147,3 +147,20 @@ Dependency categories:
 
 - The override is undocumented, and a macOS update may clamp it. The fallback to 80 and the warning cover that.
 - Whether System Settings' Charge Limit pane shows or resets a sub-80 value is unknown and not handled.
+
+## Outcome (2026-10-21)
+
+Built in 8 commits plus a 4-commit fix wave from the final review. All 66 core tests pass, and the app build succeeds. Device checks were run on Mac17,8 / macOS 27 with AlDente off:
+
+- **Spike:** with the battery holding at 76, the override 72 applied on notify alone, with no % tick. A `CHIE` pulse above the new limit kept "AC Power". There was no stuck state.
+- **(a) Pass.** Setting 60 at 72 % gave `CHLT` = 60 within seconds. The battery drained at about −13 W while macOS showed "AC Power". The popover read "Draining to 60%" with the adapter "· idle", and there was no Weak Adapter.
+- **(b) Pass.** The battery reached 60 at 14:43 and held there for 11 min: `CHLT` = 3c0505, battery current 0 (one −99 mA blip), and "Holding at 60%". All 263 samples from 12:12 on read "AC Power".
+- **(c) Pass.** Setting 80 again gave `CHLT` = 80, and PowerUI and System Settings showed 80. The battery took current within seconds (+42 W). The popover went on saying "Not charging" for a while afterwards, because macOS reports the charging state late (`pmset` lagged too).
+- **(d) Pass, with one difference.** Pause disabled the limit and resume re-applied 60. While paused, `mclLimitValue` read **100**, not 80. PowerUI's disable seems to write 100 itself. It is still a value System Settings can show, so the goal is met.
+- **(e) Pass.** The Mac slept and woke at 60 with "Using AC" throughout. Afterwards `CHLT` = 60 and `CHIE` = 00.
+- **(f) Pass.** With a 30 W adapter at the limit and a 19–32 W load, the battery supplied 1–12 W, and the Weak Adapter notice appeared.
+
+Parked for later:
+- After 3 failed adapter re-enables, the Charge Limit stays unavailable until energd restarts. The adapter itself is turned back on at the next event.
+- The heal can undo the `adapter off` step of `smoke.sh` while energd runs.
+- Spec nits: the Architecture row says "`adapterWasCut()` once at start"; "retried up to 3 times" should be "3 attempts"; the "Stuck recovery" bullet is stale.
