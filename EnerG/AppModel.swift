@@ -26,14 +26,15 @@ final class AppModel {
     /// Polls can't reach energd; cleared by an applied reply, or when the helper isn't enabled or is unregistered.
     private var unreachable = false
     private let client = DaemonClient()
-    private var reconciler = Reconciler()
-    private var polling: Task<Void, Never>?
+    /// Not observed, like the bookkeeping below: views see it only through what `publish()` copies out.
+    @ObservationIgnored private var reconciler = Reconciler()
+    @ObservationIgnored private var polling: Task<Void, Never>?
     /// Sends queued changes; keeps running while the popover is closed.
-    private var sender: Task<Void, Never>?
-    private var settleTimer: Task<Void, Never>?
-    private var lastAlDenteScan: ContinuousClock.Instant?
+    @ObservationIgnored private var sender: Task<Void, Never>?
+    @ObservationIgnored private var settleTimer: Task<Void, Never>?
+    @ObservationIgnored private var lastAlDenteScan: ContinuousClock.Instant?
     /// While `uninstallHelper` runs, clicks are ignored and no queued change is sent, so none lands after `release`.
-    private var uninstalling = false
+    @ObservationIgnored private var uninstalling = false
 
     init() {
         // Launch at login defaults to on, once.

@@ -56,6 +56,14 @@ public final class MacHardware: Hardware, LimitControls {
         try nativeLimit.set(percent)
     }
 
+    /// PowerUI's native Charge Limit and whether it is on, as System Settings shows it (energ-smoke).
+    public func nativeLimitState() throws -> (limit: Int, enabled: Bool) {
+        var limit: UInt8 = 0
+        var enabled = false
+        try check(powerui_get_limit(&limit, &enabled))
+        return (Int(limit), enabled)
+    }
+
     /// `NativeLimit.healAdapter`, logging a failed re-enable. The Engine takes a snapshot on every event (`.start`
     /// and `.stop` included), from the same serial context as `setChargeLimit`, so this never runs mid-pulse.
     /// Never throws.

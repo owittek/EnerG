@@ -17,6 +17,6 @@ let package = Package(
             linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("Foundation")]
         ),
         .target(name: "EnerGMac", dependencies: ["EnerGCore", "CPlatform"]),
-        .executableTarget(name: "energ-smoke", dependencies: ["EnerGCore", "EnerGMac", "CPlatform"]),
+        .executableTarget(name: "energ-smoke", dependencies: ["EnerGCore", "EnerGMac"]),
     ]
 )

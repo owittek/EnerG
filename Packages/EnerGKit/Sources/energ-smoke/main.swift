@@ -1,5 +1,4 @@
 import Foundation
-import CPlatform
 import EnerGCore
 import EnerGMac
 
@@ -14,10 +13,7 @@ do {
     case ("status", _):
         print(try hw.snapshot())
     case ("get-limit", _):
-        var limit: UInt8 = 0
-        var enabled = false
-        let rc = powerui_get_limit(&limit, &enabled)
-        guard rc == 0 else { throw rc == -1 ? HardwareError.frameworkUnavailable : HardwareError.io(rc) }
+        let (limit, enabled) = try hw.nativeLimitState()
         print("\(enabled ? "\(limit)" : "off") CHLT=\(hw.smcLimit().map(String.init) ?? "off")")
     case ("adapter", "on"):
         try hw.setAdapter(enabled: true)

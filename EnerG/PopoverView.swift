@@ -3,7 +3,7 @@ import ServiceManagement
 import EnerGCore
 
 struct PopoverView: View {
-    @Bindable var model: AppModel
+    let model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -119,7 +119,7 @@ private struct HelperTile: View {
                 Text("Allow EnerG in System Settings → General → Login Items, under Background App Activity.")
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Open Login Items") { HelperInstaller.openApproval() }
+                Button(ProblemAction.openLoginItems.title) { model.resolve(.openLoginItems) }
             } else {
                 Text("EnerG needs a privileged helper to control charging.").font(.callout)
                 Button("Install Helper") { model.installHelper() }
@@ -196,7 +196,7 @@ private struct ProblemTile: View {
 
 private struct ControlGrid: View {
     let status: Status
-    @Bindable var model: AppModel
+    let model: AppModel
 
     /// Pause, or released before an uninstall that then failed; a click on Pause resumes either.
     private var paused: Bool { status.state == .paused }
@@ -238,6 +238,8 @@ private struct ControlGrid: View {
 /// Adapter → Mac ↔ Battery with live watts.
 private struct PowerFlowTile: View {
     let status: Status
+    /// Battery watts below this, either way, show as idle.
+    private static let idleWatts = 0.5
 
     var body: some View {
         if let snapshot = status.snapshot {
@@ -247,7 +249,7 @@ private struct PowerFlowTile: View {
                     .foregroundStyle(adapterFlowing(snapshot) ? .primary : .tertiary)
                 node("laptopcomputer", snapshot.systemWatts.map { String(format: "%.0f W", $0) } ?? "—")
                 Image(systemName: batteryArrow(snapshot))
-                    .foregroundStyle(abs(snapshot.batteryWatts) < 0.5 ? .tertiary : .primary)
+                    .foregroundStyle(abs(snapshot.batteryWatts) < Self.idleWatts ? .tertiary : .primary)
                 node("battery.75percent", String(format: "%+.0f W", snapshot.batteryWatts))
             }
             .frame(maxWidth: .infinity)
@@ -270,8 +272,8 @@ private struct PowerFlowTile: View {
 
     /// Mac → battery while charging, battery → Mac while draining.
     private func batteryArrow(_ snapshot: BatterySnapshot) -> String {
-        if snapshot.batteryWatts > 0.5 { return "arrow.right" }
-        if snapshot.batteryWatts < -0.5 { return "arrow.left" }
+        if snapshot.batteryWatts > Self.idleWatts { return "arrow.right" }
+        if snapshot.batteryWatts < -Self.idleWatts { return "arrow.left" }
         return "minus"
     }
 }
