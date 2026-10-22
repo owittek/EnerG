@@ -42,3 +42,8 @@ public struct Status: Codable, Equatable, Sendable {
         self.warnings = warnings
     }
 }
+
+extension Status {
+    /// The Engine stopped writing this Feature after a failed hardware write.
+    public func isUnavailable(_ feature: Feature) -> Bool { warnings.contains(.unavailable(feature)) }
+}

@@ -36,3 +36,39 @@ extension Status {
         return snapshot.adapterWatts.map { "\($0) W" } ?? "Connected"
     }
 }
+
+extension Warning {
+    public var label: String {
+        switch self {
+        case .lowLimitUnsupported: "This Mac doesn't accept limits below 80%. Holding at 80%."
+        case .unavailable(let feature): "\(feature.label) is unavailable on this Mac."
+        case .batteryUnreadable: "Can't read the battery state."
+        }
+    }
+}
+
+extension Feature {
+    public var label: String {
+        switch self {
+        case .chargeLimit: "Charge Limit"
+        case .led: "MagSafe LED control"
+        }
+    }
+}
+
+extension LEDMode {
+    public var label: String {
+        switch self {
+        case .auto: "Auto"
+        case .off: "Off"
+        }
+    }
+
+    /// Click order on the LED tile.
+    public var next: LEDMode {
+        switch self {
+        case .auto: .off
+        case .off: .auto
+        }
+    }
+}

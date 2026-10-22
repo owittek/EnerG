@@ -33,4 +33,25 @@ struct LabelTests {
         #expect(status(.atLimit, effectiveLimit: nil).stateLabel == "Not charging")
         #expect(status(.charging, percent: 70).stateLabel == "Charging")
     }
+
+    @Test func warningLabel() {
+        #expect(Warning.lowLimitUnsupported.label == "This Mac doesn't accept limits below 80%. Holding at 80%.")
+        #expect(Warning.unavailable(.chargeLimit).label == "Charge Limit is unavailable on this Mac.")
+        #expect(Warning.unavailable(.led).label == "MagSafe LED control is unavailable on this Mac.")
+        #expect(Warning.batteryUnreadable.label == "Can't read the battery state.")
+    }
+
+    @Test func ledModeLabelAndClickOrder() {
+        #expect(LEDMode.auto.label == "Auto")
+        #expect(LEDMode.off.label == "Off")
+        #expect(LEDMode.auto.next == .off)
+        #expect(LEDMode.off.next == .auto)
+    }
+
+    @Test func isUnavailable() {
+        var status = status(.atLimit)
+        status.warnings = [.unavailable(.led)]
+        #expect(status.isUnavailable(.led))
+        #expect(!status.isUnavailable(.chargeLimit))
+    }
 }
