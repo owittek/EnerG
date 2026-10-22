@@ -8,7 +8,7 @@ EnerG caps your MacBook's charge from the menu bar. Once the battery reaches you
 
 A free, open-source alternative to AlDente, built around just the essentials.
 
-<img src="EnerG.avif" alt="The EnerG popover" width="386">
+<img src="docs/images/popover.avif" alt="The EnerG popover" width="386">
 
 ## Features
 
@@ -43,7 +43,12 @@ EnerG isn't notarized (that needs a paid Apple Developer account), so Gatekeeper
 
 1. Download `EnerG.zip` from [Releases](https://github.com/owittek/EnerG/releases/latest) and move `EnerG.app` to Applications.
 2. Open it. macOS says it can't verify the app; click **Done**.
-3. In System Settings → Privacy & Security, click **Open Anyway** next to EnerG.
+
+   <img src="docs/images/gatekeeper-not-opened.avif" alt="macOS dialog: “EnerG.app” Not Opened, with Move to Trash and Done buttons" width="372">
+
+3. In System Settings → Privacy & Security, scroll down to **Security** and click **Open Anyway** next to “EnerG.app” was blocked.
+
+   <img src="docs/images/privacy-security-open-anyway.avif" alt="System Settings → Privacy & Security, showing “EnerG.app” was blocked to protect your Mac, with an Open Anyway button" width="640">
 
 </details>
 
