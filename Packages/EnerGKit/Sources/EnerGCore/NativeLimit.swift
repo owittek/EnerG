@@ -12,6 +12,8 @@ public protocol LimitControls: AnyObject {
     func smcLimit() -> Int?
     /// A charger is physically plugged in.
     func pluggedIn() -> Bool
+    /// SMC `CHIE` reads cut; false when unreadable.
+    func adapterReadsCut() -> Bool
     /// SMC `CHIE`: false cuts adapter power.
     func setAdapter(enabled: Bool) throws
     func wait(_ seconds: TimeInterval)
@@ -19,7 +21,8 @@ public protocol LimitControls: AnyObject {
 
 /// Sets the native Charge Limit, including values below 80 that PowerUI rejects (ADR 0001). Those go through
 /// the smartcharging defaults override. The daemon applies an override on its next % change or plug event,
-/// so when the battery is steady a `CHIE` pulse supplies the plug event.
+/// so when the battery is steady a `CHIE` pulse supplies the plug event. Owns the adapter's `CHIE` lifecycle:
+/// the pulse, and the heal of an adapter a pulse left cut.
 public final class NativeLimit {
     /// PowerUI's lowest accepted limit, and the fallback when a lower one doesn't take.
     public static let powerUIMinimum = 80
@@ -36,8 +39,18 @@ public final class NativeLimit {
         self.settle = settle
     }
 
-    /// Call when the adapter was found cut and has been turned back on, never while a `set` is running.
-    public func adapterWasCut() { adapterCut = true }
+    /// Turns `CHIE` back on if the adapter was left cut: a pulse whose re-enable failed, a crash mid-pulse, or an
+    /// older build's Discharge. A cut reading is confirmed by a second read 0.25 s later. The next `set` then
+    /// re-applies the limit so macOS doesn't stay on battery, even when the re-enable throws. Call from the same
+    /// serial context as `set`, so it never runs mid-pulse.
+    public func healAdapter() throws {
+        guard controls.adapterReadsCut() else { return }
+        // A read straight after a pulse's re-enable can return the old value: confirm before healing.
+        controls.wait(0.25)
+        guard controls.adapterReadsCut() else { return }
+        adapterCut = true
+        try controls.setAdapter(enabled: true)
+    }
 
     /// Sets the limit; nil disables it. Returns the limit now in effect: `percent`, or `powerUIMinimum` when a
     /// lower value didn't take. Below `powerUIMinimum` while unplugged, `percent` is returned unverified, because the
@@ -117,7 +130,7 @@ public final class NativeLimit {
         do {
             try controls.setAdapter(enabled: true)
         } catch {
-            // The snapshot's heal turns it back on; the next set must then re-apply.
+            // `healAdapter` turns it back on; the next set must then re-apply.
             adapterCut = true
             throw HardwareError.adapterCut
         }

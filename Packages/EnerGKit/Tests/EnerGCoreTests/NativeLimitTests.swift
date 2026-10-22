@@ -8,6 +8,14 @@ struct NativeLimitTests {
         return (NativeLimit(controls: controls), controls)
     }
 
+    /// A cut found and healed before the next `set`, with the heal's own calls cleared.
+    private func healCut(_ limit: NativeLimit, _ controls: FakeLimitControls) throws {
+        controls.adapterCut = true
+        try limit.healAdapter()
+        controls.calls.removeAll()
+        controls.waits.removeAll()
+    }
+
     @Test func eightyAndAboveUsePowerUI() throws {
         let (limit, controls) = make()
         #expect(try limit.set(85) == 85)
@@ -108,9 +116,9 @@ struct NativeLimitTests {
     }
 
     // A cut left behind (crash mid-pulse) above the limit keeps macOS on battery until the limit is disabled and set again.
-    @Test func adapterWasCutDisablesBeforeTheNextSetOnly() throws {
+    @Test func healedCutDisablesBeforeTheNextSetOnly() throws {
         let (limit, controls) = make()
-        limit.adapterWasCut()
+        try healCut(limit, controls)
         #expect(try limit.set(80) == 80)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80)])
         controls.calls.removeAll()
@@ -119,9 +127,9 @@ struct NativeLimitTests {
     }
 
     // The CHLT read can lag a write just made, so a stale match must not skip the re-apply.
-    @Test func adapterWasCutBelowEightyIgnoresTheStaleReading() throws {
+    @Test func healedCutBelowEightyIgnoresTheStaleReading() throws {
         let (limit, controls) = make { $0.chlt = 60 }
-        limit.adapterWasCut()
+        try healCut(limit, controls)
         #expect(try limit.set(60) == 60)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80), .override(60), .notify])
     }
@@ -148,17 +156,55 @@ struct NativeLimitTests {
             $0.daemon = .neverApplies
             $0.staleReads = true
         }
-        limit.adapterWasCut()
+        try healCut(limit, controls)
         #expect(try limit.set(60) == 80)
         #expect(controls.calls.last == .setMCL(80))
     }
 
     // The re-apply disable turns the limit off, so the value from before it decides whether 80 goes back first.
-    @Test func adapterWasCutThenDisableRestoresEightyFirst() throws {
+    @Test func healedCutThenDisableRestoresEightyFirst() throws {
         let (limit, controls) = make { $0.chlt = 60 }
-        limit.adapterWasCut()
+        try healCut(limit, controls)
         #expect(try limit.set(nil) == nil)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80), .setMCL(nil)])
+    }
+
+    @Test func healLeavesAWorkingAdapterAlone() throws {
+        let (limit, controls) = make()
+        try limit.healAdapter()
+        #expect(controls.calls.isEmpty)
+        #expect(controls.waits.isEmpty)
+        #expect(try limit.set(85) == 85)
+        #expect(controls.calls == [.setMCL(85)])
+    }
+
+    @Test func healTurnsACutAdapterBackOnAfterASecondRead() throws {
+        let (limit, controls) = make { $0.adapterCut = true }
+        try limit.healAdapter()
+        #expect(controls.calls == [.adapter(true)])
+        #expect(controls.waits == [0.25])
+        #expect(!controls.adapterCut)
+    }
+
+    // A read straight after a pulse's re-enable can return the old value.
+    @Test func healIgnoresACutReadingThatClearsAMomentLater() throws {
+        let (limit, controls) = make { $0.staleCutReads = 1 }
+        try limit.healAdapter()
+        #expect(controls.calls.isEmpty)
+        #expect(controls.waits == [0.25])
+        #expect(try limit.set(85) == 85)
+        #expect(controls.calls == [.setMCL(85)])
+    }
+
+    @Test func healThatCantReenableThrowsAndTheNextSetStillReapplies() throws {
+        let (limit, controls) = make {
+            $0.adapterCut = true
+            $0.failingEnables = 1
+        }
+        #expect(throws: HardwareError.self) { try limit.healAdapter() }
+        #expect(controls.calls.isEmpty)
+        #expect(try limit.set(80) == 80)
+        #expect(controls.calls == [.setMCL(nil), .setMCL(80)])
     }
 
     @Test func powerUIFailureThrows() {

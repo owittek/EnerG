@@ -56,25 +56,13 @@ public final class MacHardware: Hardware, LimitControls {
         try nativeLimit.set(percent)
     }
 
-    /// Turns `CHIE` back on if the adapter was left cut: a pulse whose re-enable failed, a crash mid-pulse, or an
-    /// older build's Discharge. A cut reading is confirmed by a second read 0.25 s later. The next `setChargeLimit`
-    /// then re-applies the limit so macOS doesn't stay on battery. The Engine takes a snapshot on every event
-    /// (`.start` and `.stop` included), from the same serial context as `setChargeLimit`, so this never runs
-    /// mid-pulse. Never throws.
+    /// `NativeLimit.healAdapter`, logging a failed re-enable. The Engine takes a snapshot on every event (`.start`
+    /// and `.stop` included), from the same serial context as `setChargeLimit`, so this never runs mid-pulse.
+    /// Never throws.
     private func healAdapter() {
-        guard adapterReadsCut() else { return }
-        // A read straight after a pulse's re-enable can return the old value: confirm before healing.
-        wait(0.25)
-        guard adapterReadsCut() else { return }
-        do { try setAdapter(enabled: true) } catch {
+        do { try nativeLimit.healAdapter() } catch {
             log.error("adapter re-enable failed: \(String(describing: error), privacy: .public)")
         }
-        nativeLimit.adapterWasCut()
-    }
-
-    private func adapterReadsCut() -> Bool {
-        guard let chie = try? read("CHIE", size: 1) else { return false }
-        return chie[0] != 0x00
     }
 
     // MARK: - LimitControls
@@ -114,6 +102,11 @@ public final class MacHardware: Hardware, LimitControls {
 
     /// Unknown counts as plugged in: a pulse with nothing plugged in is harmless.
     public func pluggedIn() -> Bool { physicallyPlugged() ?? true }
+
+    public func adapterReadsCut() -> Bool {
+        guard let chie = try? read("CHIE", size: 1) else { return false }
+        return chie[0] != 0x00
+    }
 
     public func wait(_ seconds: TimeInterval) { Thread.sleep(forTimeInterval: seconds) }
 

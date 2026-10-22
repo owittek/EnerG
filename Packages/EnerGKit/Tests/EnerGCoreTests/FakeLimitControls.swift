@@ -32,6 +32,10 @@ final class FakeLimitControls: LimitControls {
     var failingEnables = 0
     /// Adapter-off writes throw.
     var failingCut = false
+    /// What `CHIE` reads: true while the adapter is cut. Adapter writes that succeed move it.
+    var adapterCut = false
+    /// Reads that return cut before `adapterCut` decides, like a read lagging a re-enable.
+    var staleCutReads = 0
     private var pending: Int?
     private var waitsLeft = 0
     private var isStale = false
@@ -60,6 +64,14 @@ final class FakeLimitControls: LimitControls {
 
     func pluggedIn() -> Bool { plugged }
 
+    func adapterReadsCut() -> Bool {
+        if staleCutReads > 0 {
+            staleCutReads -= 1
+            return true
+        }
+        return adapterCut
+    }
+
     func setAdapter(enabled: Bool) throws {
         if !enabled, failingCut { throw HardwareError.io(-1) }
         if enabled, failingEnables > 0 {
@@ -67,6 +79,7 @@ final class FakeLimitControls: LimitControls {
             throw HardwareError.io(-1)
         }
         calls.append(.adapter(enabled))
+        adapterCut = !enabled
         if enabled, daemon == .appliesOnPulse, let pending { setCHLT(pending) }
     }
 
