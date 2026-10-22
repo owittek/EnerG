@@ -39,8 +39,19 @@ enum Policy {
     /// Derives the desired hardware state; no side effects.
     static func actuation(settings: Settings, snapshot: BatterySnapshot, session s: Session) -> Actuation {
         if isPaused(settings, s) { return .released }
-        let limit: Int? = (s.toppingUp || settings.chargeLimit >= 100) ? nil : settings.chargeLimit
-        return Actuation(chargeLimit: limit, led: led(settings.ledMode, snapshot))
+        return Actuation(chargeLimit: requestedLimit(settings, paused: false, toppingUp: s.toppingUp),
+                         led: led(settings.ledMode, snapshot))
+    }
+
+    /// The Charge Limit to ask for: none while paused, topping up or at 100. `Status.predicted` uses it too.
+    static func requestedLimit(_ settings: Settings, paused: Bool, toppingUp: Bool) -> Int? {
+        paused || toppingUp || settings.chargeLimit >= 100 ? nil : settings.chargeLimit
+    }
+
+    /// A Charge Limit below 80 didn't take: more is in effect than was asked for. `Status.predicted` uses it too.
+    static func lowLimitUnsupported(effective: Int?, requested: Int?) -> Bool {
+        guard let effective, let requested else { return false }
+        return effective > requested
     }
 
     private static func led(_ mode: LEDMode, _ snapshot: BatterySnapshot) -> LEDState {

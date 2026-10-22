@@ -6,18 +6,21 @@ extension Status {
     public func predicted(settings: Settings, toppingUp: Bool, chargingBefore: Bool) -> Status {
         let plugged = snapshot?.adapterConnected ?? true
         let topUp = toppingUp && !settings.paused && plugged
-        let requested: Int? = settings.paused || topUp || settings.chargeLimit >= 100 ? nil : settings.chargeLimit
+        let requested = Policy.requestedLimit(settings, paused: settings.paused, toppingUp: topUp)
         var effective = requested
         if let limit = requested, limit < NativeLimit.powerUIMinimum, warnings.contains(.lowLimitUnsupported) {
             effective = NativeLimit.powerUIMinimum
         }
         if warnings.contains(.unavailable(.chargeLimit)) { effective = nil }
         var newWarnings = warnings.filter { $0 != .lowLimitUnsupported }
-        if let effective, let requested, effective > requested { newWarnings.insert(.lowLimitUnsupported, at: 0) }
+        if Policy.lowLimitUnsupported(effective: effective, requested: requested) {
+            newWarnings.insert(.lowLimitUnsupported, at: 0)
+        }
         var battery = snapshot
         if var s = battery, s.adapterConnected, !settings.paused {
             let ceiling = effective ?? 100
-            s.isCharging = s.percent >= ceiling ? false : s.percent >= ceiling - 5 ? chargingBefore : true
+            let resume = ceiling - NativeLimit.firmwareBand
+            s.isCharging = s.percent >= ceiling ? false : s.percent >= resume ? chargingBefore : true
             battery = s
         }
         return Status(state: .derive(paused: settings.paused, toppingUp: topUp, snapshot: battery,

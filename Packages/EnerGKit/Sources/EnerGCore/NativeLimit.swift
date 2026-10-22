@@ -26,6 +26,8 @@ public protocol LimitControls: AnyObject {
 public final class NativeLimit {
     /// PowerUI's lowest accepted limit, and the fallback when a lower one doesn't take.
     public static let powerUIMinimum = 80
+    /// Below the limit, the firmware resumes charging only once the battery is this many points under it.
+    static let firmwareBand = 5
     private static let pollInterval: TimeInterval = 0.25
 
     private let controls: any LimitControls

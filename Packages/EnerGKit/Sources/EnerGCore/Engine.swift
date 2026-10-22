@@ -160,7 +160,7 @@ public final class Engine {
 
     private func status() -> Status {
         var warnings: [Warning] = []
-        if let effective = effectiveLimit, let requested = requestedLimit, effective > requested {
+        if Policy.lowLimitUnsupported(effective: effectiveLimit, requested: requestedLimit) {
             warnings.append(.lowLimitUnsupported)
         }
         warnings += Feature.allCases.filter(session.unavailable.contains).map(Warning.unavailable)

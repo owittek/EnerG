@@ -15,7 +15,7 @@ extension ChargeState {
 
 extension Status {
     /// The state line under the battery %. "At limit" covers the firmware band below the limit too,
-    /// where macOS doesn't charge until the battery drops 5 points under it.
+    /// where macOS doesn't charge until the battery drops `NativeLimit.firmwareBand` points under it.
     public var stateLabel: String {
         switch state {
         case .limitDrain:
@@ -23,7 +23,8 @@ extension Status {
         case .atLimit:
             guard let limit = effectiveLimit, let percent = snapshot?.percent else { return "Not charging" }
             if percent >= limit { return "Holding at \(limit)%" }
-            return percent >= limit - 5 ? "Not charging · resumes below \(limit - 5)%" : "Not charging"
+            let resume = limit - NativeLimit.firmwareBand
+            return percent >= resume ? "Not charging · resumes below \(resume)%" : "Not charging"
         default:
             return state.label
         }
