@@ -1,9 +1,6 @@
 /// Runtime state the Engine keeps between events (not persisted).
 struct Session: Equatable {
     var toppingUp = false
-    var unavailable: Set<Feature> = []
-    /// The last Charge Limit write left the adapter cut; a second one in a row makes it unavailable.
-    var adapterLeftCut = false
     /// Set by `.release` (before uninstall): acts exactly like Pause but is never persisted, so a
     /// reinstall starts with the user's real settings. Cleared by `setPaused` and `.start`.
     var released = false
