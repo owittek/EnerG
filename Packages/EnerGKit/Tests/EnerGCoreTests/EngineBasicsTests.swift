@@ -155,6 +155,23 @@ struct EngineBasicsTests {
         #expect(hw.writes == [.limit(80), .led(.orange)])
     }
 
+    // macOS sets the LED green a few seconds after an unplug, even one the Engine didn't see (asleep, or replugged
+    // before the reset).
+    @Test func ledChangedByMacOSIsRewritten() {
+        let (engine, hw) = started(Settings(ledMode: .off))
+        hw.led = .green
+        engine.handle(.tick)
+        #expect(hw.writes == [.led(.off)])
+    }
+
+    // While the system drives the LED it reads as a colour, which is no reason to write.
+    @Test func systemLEDIsNotRewritten() {
+        let (engine, hw) = started { $0.snap.adapterConnected = false }
+        hw.led = .green
+        engine.handle(.tick)
+        #expect(hw.writes.isEmpty)
+    }
+
     @Test func stopHandsLEDToSystem() {
         let (engine, hw) = started()
         engine.handle(.stop)

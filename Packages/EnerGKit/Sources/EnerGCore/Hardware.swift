@@ -9,6 +9,10 @@ public protocol Hardware: AnyObject {
     /// Throws `HardwareError.adapterCut` when a pulse left the adapter cut.
     func setChargeLimit(_ percent: Int?) throws -> Int?
     func setLED(_ state: LEDState) throws
+    /// The LED state the hardware holds now; nil when unreadable. macOS can change it on its own, e.g. a few seconds
+    /// after an unplug. Reads `.green` or `.orange` while the system drives it, so only `.off`, `.green` and `.orange`
+    /// can be told apart.
+    func readLED() -> LEDState?
 }
 
 public enum HardwareError: Error, Equatable, Sendable {

@@ -19,6 +19,8 @@ final class FakeHardware: Hardware {
     /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override (once
     /// plugged in).
     var acceptsBelow80 = true
+    /// What `readLED` returns: the last LED written; tests set it to simulate macOS changing the LED.
+    var led: LEDState?
 
     func snapshot() throws -> BatterySnapshot {
         snapshotCalls += 1
@@ -42,7 +44,10 @@ final class FakeHardware: Hardware {
     func setLED(_ state: LEDState) throws {
         if failing.contains(.led) { throw HardwareError.notPrivileged }
         writes.append(.led(state))
+        led = state
     }
+
+    func readLED() -> LEDState? { led }
 }
 
 /// An Engine that has handled `.start`, with the start writes cleared.

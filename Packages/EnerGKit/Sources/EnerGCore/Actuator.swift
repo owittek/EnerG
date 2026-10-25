@@ -1,5 +1,6 @@
-/// Writes an `Actuation` through `Hardware`, only the fields that changed, and keeps what the writes reported: the
-/// Charge Limit in effect and the Features whose writes failed. Not thread-safe: call from the Engine's serial context.
+/// Writes an `Actuation` through `Hardware`, only the fields that changed or, for the LED, that macOS changed, and
+/// keeps what the writes reported: the Charge Limit in effect and the Features whose writes failed. Not thread-safe:
+/// call from the Engine's serial context.
 final class Actuator {
     private let hardware: any Hardware
     /// Last actuation written; nil means unknown, so everything is written.
@@ -51,7 +52,7 @@ final class Actuator {
                     && (next.chargeLimit ?? NativeLimit.powerUIMinimum) < NativeLimit.powerUIMinimum
             }
         }
-        if changed(\.led, to: next) {
+        if changed(\.led, to: next) || ledDrifted(from: next.led) {
             write(.led, retryFailures: retryFailures) { try hardware.setLED(next.led) }
         }
         requestedLimit = next.chargeLimit
@@ -73,6 +74,13 @@ final class Actuator {
     /// plug-ins leave the limit alone.
     private func needsReverify(from previous: BatterySnapshot?, to current: BatterySnapshot?) -> Bool {
         previous?.adapterConnected == false && current?.adapterConnected == true && limitUnverified
+    }
+
+    /// macOS changed the LED on its own, e.g. a few seconds after an unplug. A system-driven LED reads as a colour,
+    /// so `.system` is never checked; an unreadable LED counts as unchanged.
+    private func ledDrifted(from wanted: LEDState) -> Bool {
+        guard wanted != .system, !unavailable.contains(.led), let actual = hardware.readLED() else { return false }
+        return actual != wanted
     }
 
     private func changed<T: Equatable>(_ field: KeyPath<Actuation, T>, to next: Actuation) -> Bool {

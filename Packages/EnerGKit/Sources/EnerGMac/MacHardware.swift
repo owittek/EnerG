@@ -132,6 +132,16 @@ public final class MacHardware: Hardware, LimitControls {
         try write("ACLC", value)
     }
 
+    public func readLED() -> LEDState? {
+        switch try? read("ACLC", size: 1).first {
+        case 0x00: .system
+        case 0x01: .off
+        case 0x03: .green
+        case 0x04: .orange
+        default: nil
+        }
+    }
+
     // MARK: - SMC
 
     private static let notPrivileged = kern_return_t(bitPattern: 0xE000_02C1)
