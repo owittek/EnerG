@@ -57,7 +57,7 @@ struct LimitTests {
         #expect(engine.handle(.tick).effectiveLimit == 80)
     }
 
-/// Sets 60 on a Mac that clamps it, then ticks until the first rewrite has settled.
+    /// Sets 60 on a Mac that clamps it, then ticks until the first rewrite has settled.
     private func unsupported() -> (Engine, FakeHardware) {
         let (engine, hw) = started { $0.acceptsBelow80 = false }
         engine.handle(.command(.setLimit(60)))
@@ -134,7 +134,8 @@ struct LimitTests {
         #expect(status.warnings.isEmpty)
     }
 
-        @Test func aLimitBelowEightySetWhilePluggedInIsNotResetOnALaterPlugIn() {
+    // The daemon applies the override on the plug event itself: a mismatch after it waits for the retry delay.
+    @Test func aPlugInDoesNotRewriteTheLimitRightAway() {
         let (engine, hw) = started { $0.acceptsBelow80 = false }
         engine.handle(.command(.setLimit(60)))
         hw.writes.removeAll()
@@ -143,6 +144,8 @@ struct LimitTests {
         engine.handle(.powerChanged)
         hw.snap.adapterConnected = true
         engine.handle(.powerChanged)
+        hw.advance(31)
+        engine.handle(.tick)
         #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
     }
 
