@@ -25,6 +25,8 @@ final class FakeLimitControls: LimitControls {
     var chlt: Int? = 80
     /// A `CHLT` read after a change returns the value from before it, until the next `wait`.
     var staleReads = false
+    /// macOS ignores every limit (Calibration): `CHLT` reads off whatever is written.
+    var ignoresLimits = false
     var plugged = true
     var failingMCL = false
     var failingOverride = false
@@ -60,7 +62,7 @@ final class FakeLimitControls: LimitControls {
         if daemon == .appliesOnNotify, let pending { setCHLT(pending) }
     }
 
-    func smcLimit() -> Int? { isStale ? staleValue : chlt }
+    func smcLimit() -> Int? { ignoresLimits ? nil : isStale ? staleValue : chlt }
 
     func pluggedIn() -> Bool { plugged }
 

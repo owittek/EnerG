@@ -55,11 +55,11 @@ public final class NativeLimit {
     }
 
     /// Sets the limit; nil disables it. Below `powerUIMinimum` the override is written and, when the daemon doesn't
-    /// apply it within `settle` while plugged in, a pulse supplies the plug event. Whether it took is judged later
-    /// from snapshots (`LimitCheck`): during Calibration macOS ignores every limit, so the override is left in place for
-    /// the daemon to apply once it ends. Throws when PowerUI fails, or `HardwareError.adapterCut` when the adapter can't
-    /// be turned back on after a pulse. Can block for about 5 s when a pulse is needed, and one poll longer after a
-    /// re-apply.
+    /// apply it within `settle` while plugged in, a pulse supplies the plug event, unless `CHLT` still reads off: then
+    /// macOS ignores every limit (Calibration) and the override is left in place for the daemon to apply once it ends.
+    /// Whether it took is judged later from snapshots (`LimitCheck`). Throws when PowerUI fails, or
+    /// `HardwareError.adapterCut` when the adapter can't be turned back on after a pulse. Can block for about 5 s when
+    /// a pulse is needed, and one poll longer after a re-apply.
     public func set(_ percent: Int?) throws {
         let reapplying = adapterCut
         // Read before the re-apply disable, which turns the limit off.
@@ -91,6 +91,8 @@ public final class NativeLimit {
         controls.notifyDefaultsChanged()
         if waitUntilApplied(percent, afterReapply: reapplying) { return }
         guard controls.pluggedIn() else { return }
+        // Still off after 80 and the override: macOS ignores every limit, and a pulse can't change that.
+        guard controls.smcLimit() != nil else { return }
         // A failed cut leaves the override in place for the next % change or plug event.
         guard try pulse() else { return }
         _ = waitUntilApplied(percent, afterReapply: false)

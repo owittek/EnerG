@@ -47,6 +47,16 @@ struct NativeLimitTests {
         #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true)])
     }
 
+    // During Calibration CHLT stays off even after 80 and the override: a pulse can't help, LimitCheck judges later.
+    @Test func belowEightyDoesNotPulseWhileMacOSIgnoresLimits() throws {
+        let (limit, controls) = make {
+            $0.daemon = .neverApplies
+            $0.ignoresLimits = true
+        }
+        try limit.set(60)
+        #expect(controls.calls == [.setMCL(80), .override(60), .notify])
+    }
+
     // Nothing to apply later, so 80 is put in place.
     @Test func belowEightyHoldsEightyWhenTheOverrideWriteFails() throws {
         let (limit, controls) = make { $0.failingOverride = true }
