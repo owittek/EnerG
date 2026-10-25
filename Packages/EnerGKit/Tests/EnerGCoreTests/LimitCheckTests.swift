@@ -48,6 +48,17 @@ struct LimitCheckTests {
         #expect(check.verdict == .ok)
     }
 
+    // A rewrite made before Calibration doesn't count once it ends: the first mismatch after it is retried.
+    @Test func calibrationClearsTheRetries() {
+        var (check, _) = settled(60, chlt: 80)
+        _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 631)
+        check.wrote(at: t0 + 631)
+        _ = check.observe(requested: 60, snapshot: snap(chlt: nil), now: t0 + 662)
+        #expect(check.verdict == .calibrating)
+        _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 3600)
+        #expect(check.verdict == .mismatch)
+    }
+
     @Test func aMismatchRewritesAfterTenMinutesThenIsUnsupported() {
         var (check, first) = settled(60, chlt: 80)
         #expect(check.verdict == .mismatch)

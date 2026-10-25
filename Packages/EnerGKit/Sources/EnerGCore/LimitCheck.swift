@@ -51,6 +51,7 @@ struct LimitCheck {
         if let settledAfter, now < settledAfter { return false }
         guard let held = snapshot.firmwareLimit else {
             verdict = .calibrating
+            retries = 0
             retryAt = nil
             return false
         }
