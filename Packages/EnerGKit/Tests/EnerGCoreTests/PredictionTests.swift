@@ -68,4 +68,19 @@ struct PredictionTests {
                                 toppingUp: false, warnings: [.batteryUnreadable])
         #expect(unreadable.predicted(settings: Settings(), toppingUp: false, chargingBefore: false).state == .unknown)
     }
+
+    @Test func calibrationStaysWhileALimitIsRequested() {
+        let calibrating = reported(Settings(chargeLimit: 60), percent: 62, charging: true, warnings: [.calibrating])
+        var settings = calibrating.settings
+        settings.chargeLimit = 70
+        let changed = calibrating.predicted(settings: settings, toppingUp: false, chargingBefore: true)
+        #expect(changed.warnings == [.calibrating])
+        // macOS keeps charging past the limit during Calibration.
+        #expect(changed.snapshot?.isCharging == true)
+        let toppingUp = calibrating.predicted(settings: calibrating.settings, toppingUp: true, chargingBefore: true)
+        #expect(toppingUp.warnings.isEmpty)
+        settings.paused = true
+        let paused = calibrating.predicted(settings: settings, toppingUp: false, chargingBefore: true)
+        #expect(paused.warnings.isEmpty)
+    }
 }

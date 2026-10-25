@@ -14,6 +14,17 @@ extension ChargeState {
 }
 
 extension Status {
+    /// A second, quieter line under a warning's label; nil when the label says it all.
+    public func detail(for warning: Warning) -> String? {
+        switch warning {
+        case .calibrating:
+            "macOS is calibrating the battery and ignores charge limits until it's done. "
+                + "EnerG switches back to \(settings.chargeLimit)% as soon as it can."
+        case .lowLimitUnsupported, .unavailable, .batteryUnreadable:
+            nil
+        }
+    }
+
     /// The state line under the battery %. "At limit" covers the firmware band below the limit too,
     /// where macOS doesn't charge until the battery drops `NativeLimit.firmwareBand` points under it.
     public var stateLabel: String {

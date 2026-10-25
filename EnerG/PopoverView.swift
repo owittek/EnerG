@@ -81,6 +81,8 @@ private struct NoticeTile: View {
     let text: String
     let symbol: String
     let tint: Color
+    /// Optional quieter second line under the text.
+    var detail: String?
     /// In progress: a spinner instead of the symbol, and secondary text.
     var busy = false
     /// Optional button under the text.
@@ -91,9 +93,14 @@ private struct NoticeTile: View {
         Label {
             VStack(alignment: .leading, spacing: 6) {
                 Text(text).font(.callout)
+                    .fontWeight(detail == nil ? nil : .semibold)
                     .foregroundStyle(busy ? .secondary : .primary)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let actionTitle { Button(actionTitle, action: action) }
             }
         } icon: {
@@ -170,7 +177,8 @@ private struct NoticeTiles: View {
 
     var body: some View {
         ForEach(status.warnings, id: \.self) { warning in
-            NoticeTile(text: warning.label, symbol: "exclamationmark.triangle.fill", tint: .orange)
+            NoticeTile(text: warning.label, symbol: "exclamationmark.triangle.fill", tint: .orange,
+                       detail: status.detail(for: warning))
         }
         if model.alDenteRunning {
             NoticeTile(text: "AlDente (or its helper) is running and may override EnerG.",

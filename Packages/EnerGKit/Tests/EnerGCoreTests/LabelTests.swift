@@ -55,4 +55,12 @@ struct LabelTests {
         #expect(status.isUnavailable(.led))
         #expect(!status.isUnavailable(.chargeLimit))
     }
+
+    @Test func calibrationDetailNamesTheLimit() {
+        var status = status(.charging)
+        status.settings.chargeLimit = 60
+        #expect(status.detail(for: .calibrating)
+                == "macOS is calibrating the battery and ignores charge limits until it's done. EnerG switches back to 60% as soon as it can.")
+        #expect(status.detail(for: .lowLimitUnsupported) == nil)
+    }
 }
