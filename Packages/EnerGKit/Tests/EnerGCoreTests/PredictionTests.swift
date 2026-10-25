@@ -70,7 +70,7 @@ struct PredictionTests {
     }
 
     @Test func calibrationStaysWhileALimitIsRequested() {
-        let calibrating = reported(Settings(chargeLimit: 60), percent: 62, charging: true, warnings: [.calibrating])
+        let calibrating = reported(Settings(chargeLimit: 60), percent: 72, charging: true, warnings: [.calibrating])
         var settings = calibrating.settings
         settings.chargeLimit = 70
         let changed = calibrating.predicted(settings: settings, toppingUp: false, chargingBefore: true)
