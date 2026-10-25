@@ -12,13 +12,14 @@ struct LimitCheck {
         case calibrating
         /// `CHLT` holds another value; `observe` asks for a rewrite once the retry delay has passed.
         case mismatch
-        /// A limit below 80 still reads as this value after a rewrite, so this value is in effect.
+        /// A limit below 80 still reads as this value after a rewrite, so this value is in effect. No more timed
+        /// rewrites: a plug-in or limit change starts fresh, and a wake's re-assert still writes it.
         case unsupported(Int)
     }
 
     /// A `CHLT` read this soon after a limit write or a plug-in can show the value from before it.
     static let settle: TimeInterval = 30
-    /// Delay before the first rewrite of a mismatch; doubles per rewrite up to `maxRetry`.
+    /// Delay before the first rewrite of a mismatch; doubles per rewrite up to `maxRetry`. Not once unsupported.
     static let firstRetry: TimeInterval = 10 * 60
     static let maxRetry: TimeInterval = 160 * 60
 
@@ -61,7 +62,13 @@ struct LimitCheck {
             retryAt = nil
             return false
         }
-        verdict = retries > 0 && requested < NativeLimit.powerUIMinimum ? .unsupported(held) : .mismatch
+        if retries > 0, requested < NativeLimit.powerUIMinimum {
+            // Each rewrite may pulse the adapter: the override stays for the daemon, with no more timed rewrites.
+            verdict = .unsupported(held)
+            retryAt = nil
+            return false
+        }
+        verdict = .mismatch
         guard let due = retryAt else {
             retryAt = now + min(Self.firstRetry * pow(2, Double(retries)), Self.maxRetry)
             return false
