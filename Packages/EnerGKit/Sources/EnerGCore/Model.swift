@@ -57,9 +57,13 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
     /// `adapterConnected` was read from `AC-W`, so it stays true while `CHIE` cuts the adapter.
     /// False on the `ExternalConnected` fallback, where a cut itself reads as unplugged.
     public var plugSensed: Bool
+    /// The limit the firmware enforces (SMC `CHLT` byte 0); nil when off or unreadable. Off while a limit is
+    /// requested means macOS ignores every limit for now (Calibration).
+    public var firmwareLimit: Int?
 
     public init(percent: Int, isCharging: Bool, adapterConnected: Bool,
-                adapterWatts: Int?, batteryWatts: Double, systemWatts: Double?, plugSensed: Bool = true) {
+                adapterWatts: Int?, batteryWatts: Double, systemWatts: Double?, plugSensed: Bool = true,
+                firmwareLimit: Int? = nil) {
         self.percent = percent
         self.isCharging = isCharging
         self.adapterConnected = adapterConnected
@@ -67,6 +71,7 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         self.batteryWatts = batteryWatts
         self.systemWatts = systemWatts
         self.plugSensed = plugSensed
+        self.firmwareLimit = firmwareLimit
     }
 
     /// `plugSensed` defaults to true when missing, so an app can read an older energd's Status.
@@ -79,6 +84,7 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         batteryWatts = try c.decode(Double.self, forKey: .batteryWatts)
         systemWatts = try c.decodeIfPresent(Double.self, forKey: .systemWatts)
         plugSensed = try c.decodeIfPresent(Bool.self, forKey: .plugSensed) ?? true
+        firmwareLimit = try c.decodeIfPresent(Int.self, forKey: .firmwareLimit)
     }
 }
 

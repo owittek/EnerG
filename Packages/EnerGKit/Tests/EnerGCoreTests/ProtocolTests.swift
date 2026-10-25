@@ -19,6 +19,19 @@ struct ProtocolTests {
         #expect(snapshot.plugSensed)
     }
 
+    @Test func snapshotWithoutFirmwareLimitDecodes() throws {
+        let json = #"{"percent":81,"isCharging":false,"adapterConnected":true,"batteryWatts":-5.5,"plugSensed":true}"#
+        let snapshot = try JSONDecoder().decode(BatterySnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.firmwareLimit == nil)
+    }
+
+    @Test func snapshotFirmwareLimitRoundTrips() throws {
+        let snapshot = BatterySnapshot(percent: 62, isCharging: true, adapterConnected: true, adapterWatts: 70,
+                                       batteryWatts: 40, systemWatts: 20, firmwareLimit: 60)
+        let data = try JSONEncoder().encode(snapshot)
+        #expect(try JSONDecoder().decode(BatterySnapshot.self, from: data) == snapshot)
+    }
+
     @Test func statusRoundTrips() throws {
         let status = Status(
             state: .atLimit,

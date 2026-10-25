@@ -39,16 +39,18 @@ public final class MacHardware: Hardware, LimitControls {
         let adapter = p["AdapterDetails"] as? [String: Any]
         let plugged = physicallyPlugged()
         let adapterConnected = plugged ?? (p["ExternalConnected"] as? Bool ?? false)
+        let chlt = try? read("CHLT", size: 3)
         return BatterySnapshot(
             percent: percent,
-            isCharging: BatterySnapshot.isCharging(chlt: try? read("CHLT", size: 3), percent: percent,
+            isCharging: BatterySnapshot.isCharging(chlt: chlt, percent: percent,
                                                    adapterConnected: adapterConnected,
                                                    registryIsCharging: p["IsCharging"] as? Bool ?? false),
             adapterConnected: adapterConnected,
             adapterWatts: (adapter?["Watts"] as? NSNumber)?.intValue,
             batteryWatts: liveBatteryWatts() ?? milliamps * millivolts / 1_000_000,
             systemWatts: (try? readFloat("PSTR")).map(Double.init),
-            plugSensed: plugged != nil
+            plugSensed: plugged != nil,
+            firmwareLimit: chlt.flatMap { $0[0] == 0 ? nil : Int($0[0]) }
         )
     }
 
