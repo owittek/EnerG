@@ -25,6 +25,8 @@ final class FakeLimitControls: LimitControls {
     var chlt: Int? = 80
     /// A `CHLT` read after a change returns the value from before it, until the next `wait`.
     var staleReads = false
+    /// `mclLimitValue`: the override written, or a PowerUI limit (it writes the same key).
+    var mclLimitValue: Int?
     /// macOS ignores every limit (Calibration): `CHLT` reads off whatever is written.
     var ignoresLimits = false
     var plugged = true
@@ -46,6 +48,7 @@ final class FakeLimitControls: LimitControls {
     func setMCL(_ percent: Int?) throws {
         if failingMCL { throw HardwareError.io(-2) }
         calls.append(.setMCL(percent))
+        if let percent { mclLimitValue = percent }
         setCHLT(percent)
         pending = nil
     }
@@ -53,9 +56,12 @@ final class FakeLimitControls: LimitControls {
     func writeOverride(_ percent: Int) throws {
         if failingOverride { throw HardwareError.io(-3) }
         calls.append(.override(percent))
+        mclLimitValue = percent
         pending = percent
         if case .appliesAfterWaits(let n) = daemon { waitsLeft = n }
     }
+
+    func overrideValue() -> Int? { mclLimitValue }
 
     func notifyDefaultsChanged() {
         calls.append(.notify)

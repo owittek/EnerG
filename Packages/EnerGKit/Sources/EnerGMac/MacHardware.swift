@@ -100,6 +100,12 @@ public final class MacHardware: Hardware, LimitControls {
         }
     }
 
+    public func overrideValue() -> Int? {
+        let value = CFPreferencesCopyValue("mclLimitValue" as CFString, Self.smartChargingDomain as CFString,
+                                           kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+        return (value as? NSNumber)?.intValue
+    }
+
     public func notifyDefaultsChanged() {
         notify_post("com.apple.smartcharging.defaultschanged")
     }

@@ -6,6 +6,8 @@ public protocol LimitControls: AnyObject {
     func setMCL(_ percent: Int?) throws
     /// Writes `mclLimitValue` into root's `com.apple.smartcharging.topoffprotection` defaults.
     func writeOverride(_ percent: Int) throws
+    /// `mclLimitValue` in those defaults, which PowerUI writes too; nil when absent.
+    func overrideValue() -> Int?
     /// Posts `com.apple.smartcharging.defaultschanged` so the smartcharging daemon re-reads its defaults.
     func notifyDefaultsChanged()
     /// The limit the firmware enforces (`CHLT` byte 0); nil when off or unreadable.
@@ -54,12 +56,13 @@ public final class NativeLimit {
         try controls.setAdapter(enabled: true)
     }
 
-    /// Sets the limit; nil disables it. Below `powerUIMinimum` the override is written and, when the daemon doesn't
-    /// apply it within `settle` while plugged in, a pulse supplies the plug event, unless `CHLT` still reads off: then
-    /// macOS ignores every limit (Calibration) and the override is left in place for the daemon to apply once it ends.
-    /// Whether it took is judged later from snapshots (`LimitCheck`). Throws when PowerUI fails, or
-    /// `HardwareError.adapterCut` when the adapter can't be turned back on after a pulse. Can block for about 5 s when
-    /// a pulse is needed, and one poll longer after a re-apply.
+    /// Sets the limit; nil disables it, first putting `powerUIMinimum` back when the override or `CHLT` is below it.
+    /// Below `powerUIMinimum` the override is written and, when the daemon doesn't apply it within `settle` while
+    /// plugged in, a pulse supplies the plug event, unless `CHLT` still reads off: then macOS ignores every limit
+    /// (Calibration) and the override is left in place for the daemon to apply once it ends. Whether it took is judged
+    /// later from snapshots (`LimitCheck`). Throws when PowerUI fails, or `HardwareError.adapterCut` when the adapter
+    /// can't be turned back on after a pulse. Can block for about 5 s when a pulse is needed, and one poll longer after
+    /// a re-apply.
     public func set(_ percent: Int?) throws {
         let reapplying = adapterCut
         // Read before the re-apply disable, which turns the limit off.
@@ -69,8 +72,10 @@ public final class NativeLimit {
             adapterCut = false
         }
         guard let percent else {
-            // Leave Apple's domain holding a value System Settings can show.
-            if let current, current < Self.powerUIMinimum { try controls.setMCL(Self.powerUIMinimum) }
+            // Leave Apple's domain holding a value System Settings can show. CHLT alone misses an override that
+            // didn't take (Calibration, a clamping macOS).
+            let held = [current, controls.overrideValue()].compactMap { $0 }
+            if held.contains(where: { $0 < Self.powerUIMinimum }) { try controls.setMCL(Self.powerUIMinimum) }
             try controls.setMCL(nil)
             return
         }

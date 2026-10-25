@@ -134,6 +134,25 @@ struct NativeLimitTests {
         #expect(controls.calls == [.setMCL(80), .setMCL(nil)])
     }
 
+    // During Calibration CHLT reads off, but the override written below 80 is still in Apple's domain.
+    @Test func disablingRestoresEightyOverAnOverrideWhileMacOSIgnoresLimits() throws {
+        let (limit, controls) = make {
+            $0.daemon = .neverApplies
+            $0.ignoresLimits = true
+        }
+        try limit.set(60)
+        controls.calls.removeAll()
+        try limit.set(nil)
+        #expect(controls.calls == [.setMCL(80), .setMCL(nil)])
+    }
+
+    // A Mac that clamps the override holds 80 in CHLT while the override still says 60.
+    @Test func disablingRestoresEightyOverAClampedOverride() throws {
+        let (limit, controls) = make { $0.mclLimitValue = 60 }
+        try limit.set(nil)
+        #expect(controls.calls == [.setMCL(80), .setMCL(nil)])
+    }
+
     @Test func disablingAtEightyOrAboveJustDisables() throws {
         let (limit, controls) = make()
         try limit.set(nil)
