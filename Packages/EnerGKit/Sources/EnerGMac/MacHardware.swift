@@ -56,6 +56,7 @@ public final class MacHardware: Hardware, LimitControls {
 
     public func setChargeLimit(_ percent: Int?) throws -> Int? {
         try nativeLimit.set(percent)
+        return percent
     }
 
     /// PowerUI's native Charge Limit and whether it is on, as System Settings shows it (energ-smoke).

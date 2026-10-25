@@ -18,55 +18,80 @@ struct NativeLimitTests {
 
     @Test func eightyAndAboveUsePowerUI() throws {
         let (limit, controls) = make()
-        #expect(try limit.set(85) == 85)
+        try limit.set(85)
         #expect(controls.calls == [.setMCL(85)])
     }
 
     @Test func belowEightyAppliedOnNotify() throws {
         let (limit, controls) = make()
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.override(60), .notify])
     }
 
     @Test func belowEightyEnablesTheNativeLimitFirstWhenOff() throws {
         let (limit, controls) = make { $0.chlt = nil }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.setMCL(80), .override(60), .notify])
     }
 
     @Test func belowEightyPulsesWhenTheBatteryIsSteady() throws {
         let (limit, controls) = make { $0.daemon = .appliesOnPulse }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true)])
     }
 
-    @Test func belowEightyFallsBackToEightyWhenItNeverTakes() throws {
+    // The override stays in place: macOS applies it by itself once it stops ignoring limits (Calibration).
+    @Test func belowEightyThatNeverTakesKeepsTheOverride() throws {
         let (limit, controls) = make { $0.daemon = .neverApplies }
-        #expect(try limit.set(60) == 80)
-        #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true), .setMCL(80)])
+        try limit.set(60)
+        #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true)])
+    }
+
+    // Nothing to apply later, so 80 is put in place.
+    @Test func belowEightyHoldsEightyWhenTheOverrideWriteFails() throws {
+        let (limit, controls) = make { $0.failingOverride = true }
+        try limit.set(60)
+        #expect(controls.calls == [.setMCL(80)])
         #expect(controls.chlt == 80)
     }
 
-    @Test func belowEightyFallsBackWhenTheOverrideWriteFails() throws {
-        let (limit, controls) = make { $0.failingOverride = true }
-        #expect(try limit.set(60) == 80)
-        #expect(controls.calls == [.setMCL(80)])
+    // The override is written; only the pulse is missing, so the next % change or plug event applies it.
+    @Test func aFailedCutKeepsTheOverride() throws {
+        let (limit, controls) = make {
+            $0.daemon = .appliesOnPulse
+            $0.failingCut = true
+        }
+        try limit.set(60)
+        #expect(controls.calls == [.override(60), .notify])
+    }
+
+    // After a re-apply CHLT can still read the value from before the disable; the first poll waits it out.
+    @Test func reapplyWaitsBeforeTheFirstPoll() throws {
+        let (limit, controls) = make {
+            $0.chlt = 60
+            $0.daemon = .neverApplies
+            $0.staleReads = true
+        }
+        try healCut(limit, controls)
+        try limit.set(60)
+        #expect(controls.calls == [.setMCL(nil), .setMCL(80), .override(60), .notify, .adapter(false), .adapter(true)])
+        #expect(controls.waits.first == 0.25)
     }
 
     // Unplugged, a pulse does nothing; the plug-in event applies the value.
-    @Test func belowEightyUnpluggedIsReturnedUnverified() throws {
+    @Test func belowEightyUnpluggedDoesNotPulse() throws {
         let (limit, controls) = make {
             $0.daemon = .neverApplies
             $0.plugged = false
         }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.override(60), .notify])
     }
 
     // Wake or start with the value already in place: no writes, no pulse.
     @Test func valueAlreadyInEffectWritesNothing() throws {
         let (limit, controls) = make { $0.chlt = 60 }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls.isEmpty)
     }
 
@@ -75,7 +100,7 @@ struct NativeLimitTests {
             $0.daemon = .appliesOnPulse
             $0.failingEnables = 2
         }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.override(60), .notify, .adapter(false), .adapter(true)])
     }
 
@@ -88,30 +113,20 @@ struct NativeLimitTests {
         #expect(throws: HardwareError.adapterCut) { try limit.set(60) }
         #expect(controls.calls == [.override(60), .notify, .adapter(false)])
         controls.calls.removeAll()
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls.first == .setMCL(nil))
-    }
-
-    // The override is already written; only the pulse is missing, so this is a fallback, not a failure.
-    @Test func aFailedCutFallsBackToEighty() throws {
-        let (limit, controls) = make {
-            $0.daemon = .appliesOnPulse
-            $0.failingCut = true
-        }
-        #expect(try limit.set(60) == 80)
-        #expect(controls.calls == [.override(60), .notify, .setMCL(80)])
     }
 
     // System Settings must never be left holding a value it can't show.
     @Test func disablingRestoresEightyFirst() throws {
         let (limit, controls) = make { $0.chlt = 60 }
-        #expect(try limit.set(nil) == nil)
+        try limit.set(nil)
         #expect(controls.calls == [.setMCL(80), .setMCL(nil)])
     }
 
     @Test func disablingAtEightyOrAboveJustDisables() throws {
         let (limit, controls) = make()
-        #expect(try limit.set(nil) == nil)
+        try limit.set(nil)
         #expect(controls.calls == [.setMCL(nil)])
     }
 
@@ -119,10 +134,10 @@ struct NativeLimitTests {
     @Test func healedCutDisablesBeforeTheNextSetOnly() throws {
         let (limit, controls) = make()
         try healCut(limit, controls)
-        #expect(try limit.set(80) == 80)
+        try limit.set(80)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80)])
         controls.calls.removeAll()
-        #expect(try limit.set(85) == 85)
+        try limit.set(85)
         #expect(controls.calls == [.setMCL(85)])
     }
 
@@ -130,42 +145,30 @@ struct NativeLimitTests {
     @Test func healedCutBelowEightyIgnoresTheStaleReading() throws {
         let (limit, controls) = make { $0.chlt = 60 }
         try healCut(limit, controls)
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80), .override(60), .notify])
     }
 
     // The daemon can take a moment: applied within the settle window means no pulse.
     @Test func belowEightyAppliedWithinTheSettleWindowNeedsNoPulse() throws {
         let (limit, controls) = make { $0.daemon = .appliesAfterWaits(3) }
-        #expect(try limit.set(60) == 60)
+        try limit.set(60)
         #expect(controls.calls == [.override(60), .notify])
         #expect(controls.waits == [0.25, 0.25, 0.25])
     }
 
     @Test func eachPollWindowLastsTheSettleTime() throws {
         let (limit, controls) = make { $0.daemon = .neverApplies }
-        _ = try limit.set(60)
+        try limit.set(60)
         let poll = Array(repeating: 0.25, count: 8)
         #expect(controls.waits == poll + [1] + poll)
-    }
-
-    // After a re-apply CHLT can still read the value from before the disable; the first poll waits it out.
-    @Test func reapplyWaitsBeforeTheFirstPoll() throws {
-        let (limit, controls) = make {
-            $0.chlt = 60
-            $0.daemon = .neverApplies
-            $0.staleReads = true
-        }
-        try healCut(limit, controls)
-        #expect(try limit.set(60) == 80)
-        #expect(controls.calls.last == .setMCL(80))
     }
 
     // The re-apply disable turns the limit off, so the value from before it decides whether 80 goes back first.
     @Test func healedCutThenDisableRestoresEightyFirst() throws {
         let (limit, controls) = make { $0.chlt = 60 }
         try healCut(limit, controls)
-        #expect(try limit.set(nil) == nil)
+        try limit.set(nil)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80), .setMCL(nil)])
     }
 
@@ -174,7 +177,7 @@ struct NativeLimitTests {
         try limit.healAdapter()
         #expect(controls.calls.isEmpty)
         #expect(controls.waits.isEmpty)
-        #expect(try limit.set(85) == 85)
+        try limit.set(85)
         #expect(controls.calls == [.setMCL(85)])
     }
 
@@ -192,7 +195,7 @@ struct NativeLimitTests {
         try limit.healAdapter()
         #expect(controls.calls.isEmpty)
         #expect(controls.waits == [0.25])
-        #expect(try limit.set(85) == 85)
+        try limit.set(85)
         #expect(controls.calls == [.setMCL(85)])
     }
 
@@ -203,7 +206,7 @@ struct NativeLimitTests {
         }
         #expect(throws: HardwareError.self) { try limit.healAdapter() }
         #expect(controls.calls.isEmpty)
-        #expect(try limit.set(80) == 80)
+        try limit.set(80)
         #expect(controls.calls == [.setMCL(nil), .setMCL(80)])
     }
 

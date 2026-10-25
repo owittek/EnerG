@@ -24,7 +24,7 @@ public protocol LimitControls: AnyObject {
 /// so when the battery is steady a `CHIE` pulse supplies the plug event. Owns the adapter's `CHIE` lifecycle:
 /// the pulse, and the heal of an adapter a pulse left cut.
 public final class NativeLimit {
-    /// PowerUI's lowest accepted limit, and the fallback when a lower one doesn't take.
+    /// PowerUI's lowest accepted limit; held when the override can't be written.
     public static let powerUIMinimum = 80
     /// Below the limit, the firmware resumes charging only once the battery is this many points under it.
     static let firmwareBand = 5
@@ -54,12 +54,13 @@ public final class NativeLimit {
         try controls.setAdapter(enabled: true)
     }
 
-    /// Sets the limit; nil disables it. Returns the limit now in effect: `percent`, or `powerUIMinimum` when a
-    /// lower value didn't take. Below `powerUIMinimum` while unplugged, `percent` is returned unverified, because the
-    /// plug-in applies it; the Engine sets it again on plug-in to check. Throws when PowerUI fails, or
-    /// `HardwareError.adapterCut` when the adapter can't be turned back on after a pulse.
-    /// Can block for about 5 s when a pulse is needed, and one poll longer after a re-apply.
-    public func set(_ percent: Int?) throws -> Int? {
+    /// Sets the limit; nil disables it. Below `powerUIMinimum` the override is written and, when the daemon doesn't
+    /// apply it within `settle` while plugged in, a pulse supplies the plug event. Whether it took is judged later
+    /// from snapshots (`LimitCheck`): during Calibration macOS ignores every limit, so the override is left in place for
+    /// the daemon to apply once it ends. Throws when PowerUI fails, or `HardwareError.adapterCut` when the adapter can't
+    /// be turned back on after a pulse. Can block for about 5 s when a pulse is needed, and one poll longer after a
+    /// re-apply.
+    public func set(_ percent: Int?) throws {
         let reapplying = adapterCut
         // Read before the re-apply disable, which turns the limit off.
         let current = controls.smcLimit()
@@ -71,32 +72,28 @@ public final class NativeLimit {
             // Leave Apple's domain holding a value System Settings can show.
             if let current, current < Self.powerUIMinimum { try controls.setMCL(Self.powerUIMinimum) }
             try controls.setMCL(nil)
-            return nil
+            return
         }
         if percent >= Self.powerUIMinimum {
             try controls.setMCL(percent)
-            return percent
+            return
         }
         // A CHLT read straight after a write can return the old value, so after a re-apply it isn't trusted.
-        if !reapplying, current == percent { return percent }
+        if !reapplying, current == percent { return }
         if reapplying || current == nil { try controls.setMCL(Self.powerUIMinimum) }
         do {
             try controls.writeOverride(percent)
         } catch {
-            return try fallBack()
+            // Nothing for the daemon to apply later: hold 80.
+            try controls.setMCL(Self.powerUIMinimum)
+            return
         }
         controls.notifyDefaultsChanged()
-        if waitUntilApplied(percent, afterReapply: reapplying) { return percent }
-        guard controls.pluggedIn() else { return percent }
-        // A failed cut leaves the override in place but nothing to apply it now.
-        guard try pulse() else { return try fallBack() }
-        if waitUntilApplied(percent, afterReapply: false) { return percent }
-        return try fallBack()
-    }
-
-    private func fallBack() throws -> Int {
-        try controls.setMCL(Self.powerUIMinimum)
-        return Self.powerUIMinimum
+        if waitUntilApplied(percent, afterReapply: reapplying) { return }
+        guard controls.pluggedIn() else { return }
+        // A failed cut leaves the override in place for the next % change or plug event.
+        guard try pulse() else { return }
+        _ = waitUntilApplied(percent, afterReapply: false)
     }
 
     /// `afterReapply`: the disable and `setMCL(80)` just went out, so the first read waits one poll, as it could be
