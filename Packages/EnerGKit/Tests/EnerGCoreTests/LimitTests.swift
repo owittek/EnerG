@@ -81,6 +81,7 @@ struct LimitTests {
         status = engine.handle(.tick)
         #expect(hw.writes.isEmpty)
         #expect(status.warnings.isEmpty)
+        #expect(status.effectiveLimit == 80)
         hw.advance(600)
         engine.handle(.tick)
         #expect(hw.writes == [.limit(60)])
@@ -104,13 +105,15 @@ struct LimitTests {
         hw.advance(31)
         var status = engine.handle(.tick)
         #expect(status.warnings == [.calibrating])
-        #expect(status.effectiveLimit == 60)
+        #expect(status.effectiveLimit == nil)
         hw.advance(6 * 3600)
         status = engine.handle(.tick)
         #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
+        #expect(status.effectiveLimit == nil)
         hw.calibrating = false
         status = engine.handle(.tick)
         #expect(status.warnings.isEmpty)
+        #expect(status.effectiveLimit == 60)
     }
 
     @Test func noCalibrationWarningWhileUnpluggedPausedOrToppingUp() {

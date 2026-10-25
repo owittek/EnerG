@@ -65,12 +65,12 @@ struct LimitCheckTests {
         _ = check.observe(requested: 60, snapshot: snap(chlt: nil), now: t0 + 662)
         #expect(check.verdict == .calibrating)
         _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 3600)
-        #expect(check.verdict == .mismatch)
+        #expect(check.verdict == .mismatch(80))
     }
 
     @Test func aMismatchRewritesAfterTenMinutesThenIsUnsupported() {
         var (check, first) = settled(60, chlt: 80)
-        #expect(check.verdict == .mismatch)
+        #expect(check.verdict == .mismatch(80))
         #expect(!first)
         let early = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 31 + 599)
         #expect(!early)
@@ -122,7 +122,7 @@ struct LimitCheckTests {
         _ = check.observe(requested: 60, snapshot: snap(chlt: 80, plugged: false), now: t0 + 700)
         _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 800)
         _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 831)
-        #expect(check.verdict == .mismatch)
+        #expect(check.verdict == .mismatch(80))
         let early = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 831 + 599)
         #expect(!early)
         let due = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 831 + 600)
@@ -135,7 +135,7 @@ struct LimitCheckTests {
         _ = check.observe(requested: 85, snapshot: snap(chlt: 80), now: t0 + 31 + 600)
         check.wrote(at: t0 + 631)
         _ = check.observe(requested: 85, snapshot: snap(chlt: 80), now: t0 + 662)
-        #expect(check.verdict == .mismatch)
+        #expect(check.verdict == .mismatch(80))
     }
 
     @Test func aMatchAfterUnsupportedClearsTheRetries() {
@@ -146,7 +146,7 @@ struct LimitCheckTests {
         _ = check.observe(requested: 60, snapshot: snap(chlt: 60), now: t0 + 700)
         #expect(check.verdict == .ok)
         _ = check.observe(requested: 60, snapshot: snap(chlt: 80), now: t0 + 730)
-        #expect(check.verdict == .mismatch)
+        #expect(check.verdict == .mismatch(80))
     }
 
     // A retry's own write must not flicker the tile away.

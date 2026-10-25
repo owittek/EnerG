@@ -69,6 +69,14 @@ struct PredictionTests {
         #expect(unreadable.predicted(settings: Settings(), toppingUp: false, chargingBefore: false).state == .unknown)
     }
 
+    // No limit is in effect during Calibration, so above it is no Limit Drain.
+    @Test func calibrationPredictsNoLimitInEffect() {
+        let calibrating = reported(Settings(chargeLimit: 60), percent: 72, charging: false, warnings: [.calibrating])
+        let same = calibrating.predicted(settings: calibrating.settings, toppingUp: false, chargingBefore: false)
+        #expect(same.effectiveLimit == nil)
+        #expect(same.stateLabel == "Not charging")
+    }
+
     @Test func calibrationStaysWhileALimitIsRequested() {
         let calibrating = reported(Settings(chargeLimit: 60), percent: 72, charging: true, warnings: [.calibrating])
         var settings = calibrating.settings

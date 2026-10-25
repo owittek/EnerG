@@ -2,7 +2,8 @@ extension Status {
     /// The status energd is expected to report once `settings` and `toppingUp` are applied, from this status's
     /// snapshot and warnings. While plugged in and not paused, the snapshot's `isCharging` is re-derived from the new
     /// limit (100 when there is none): off at or above it, `chargingBefore` in the firmware's 5-point band below it,
-    /// on further below. During Calibration the snapshot is kept as is: macOS charges past any limit.
+    /// on further below. During Calibration no limit is in effect and the snapshot is kept as is: macOS charges past
+    /// any limit.
     /// A limit below 80 is predicted as 80 once `lowLimitUnsupported` has been reported.
     public func predicted(settings: Settings, toppingUp: Bool, chargingBefore: Bool) -> Status {
         let plugged = snapshot?.adapterConnected ?? true
@@ -14,7 +15,7 @@ extension Status {
         if let limit = requested, limit < NativeLimit.powerUIMinimum, warnings.contains(.lowLimitUnsupported) {
             effective = NativeLimit.powerUIMinimum
         }
-        if warnings.contains(.unavailable(.chargeLimit)) { effective = nil }
+        if warnings.contains(.unavailable(.chargeLimit)) || calibrating { effective = nil }
         var newWarnings = warnings.filter { $0 != .lowLimitUnsupported && $0 != .calibrating }
         if Policy.lowLimitUnsupported(effective: effective, requested: requested) {
             newWarnings.insert(.lowLimitUnsupported, at: 0)

@@ -25,8 +25,8 @@ public struct Status: Codable, Equatable, Sendable {
     public var settings: Settings
     /// nil when the battery could not be read.
     public var snapshot: BatterySnapshot?
-    /// The native Charge Limit in effect: the setting, or what the firmware holds when a lower one didn't take. nil
-    /// while off, paused, topping up, or when the Charge Limit is unavailable.
+    /// The native Charge Limit in effect: the setting, or what the firmware holds when that isn't it. nil while off,
+    /// paused, topping up, during Calibration, or when the Charge Limit is unavailable.
     public var effectiveLimit: Int?
     /// A Top Up is active. Also true while `state` shows something else, e.g. `.unknown`.
     public var toppingUp: Bool

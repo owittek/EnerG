@@ -10,8 +10,8 @@ struct LimitCheck {
         case ok
         /// macOS ignores every limit for now (Calibration). Nothing is written: the limit applies once it ends.
         case calibrating
-        /// `CHLT` holds another value; `observe` asks for a rewrite once the retry delay has passed.
-        case mismatch
+        /// `CHLT` holds this other value; `observe` asks for a rewrite once the retry delay has passed.
+        case mismatch(Int)
         /// A limit below 80 still reads as this value after a rewrite, so this value is in effect. No more timed
         /// rewrites: a plug-in or limit change starts fresh, and a wake's re-assert still writes it.
         case unsupported(Int)
@@ -68,7 +68,7 @@ struct LimitCheck {
             retryAt = nil
             return false
         }
-        verdict = .mismatch
+        verdict = .mismatch(held)
         guard let due = retryAt else {
             retryAt = now + min(Self.firstRetry * pow(2, Double(retries)), Self.maxRetry)
             return false

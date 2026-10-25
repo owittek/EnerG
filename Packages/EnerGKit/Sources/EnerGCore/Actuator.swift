@@ -22,10 +22,14 @@ final class Actuator {
         self.hardware = hardware
     }
 
-    /// The Charge Limit in effect: the one written, or what the firmware holds when a lower one didn't take.
+    /// The Charge Limit in effect: what the firmware holds when it isn't the one written, nil during Calibration, else
+    /// the one written.
     var effectiveLimit: Int? {
-        if case .unsupported(let held) = limitCheck.verdict { return held }
-        return writtenLimit
+        switch limitCheck.verdict {
+        case .mismatch(let held), .unsupported(let held): held
+        case .calibrating: nil
+        case .none, .ok: writtenLimit
+        }
     }
 
     /// Daemon launch: hardware state is unknown and every Feature is tried again.
