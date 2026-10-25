@@ -23,10 +23,12 @@ do {
         guard let state = LEDState(rawValue: argument) else { print(usage); exit(2) }
         try hw.setLED(state)
     case ("limit", "off"):
-        print(try hw.setChargeLimit(nil).map(String.init) ?? "off")
+        try hw.setChargeLimit(nil)
+        print("CHLT=\(hw.smcLimit().map(String.init) ?? "off")")
     case ("limit", _):
         guard let limit = Int(argument), (50...100).contains(limit) else { print(usage); exit(2) }
-        print(try hw.setChargeLimit(limit).map(String.init) ?? "off")   // the limit now in effect
+        try hw.setChargeLimit(limit)
+        print("CHLT=\(hw.smcLimit().map(String.init) ?? "off")")   // what the firmware holds now
     default:
         print(usage)
         exit(2)

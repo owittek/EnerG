@@ -118,6 +118,8 @@ public enum ChargeState: String, Codable, Sendable {
 public enum Warning: Codable, Hashable, Sendable {
     /// A Charge Limit below 80 didn't take, so 80 is in effect.
     case lowLimitUnsupported
+    /// macOS ignores every Charge Limit for now (Calibration); it applies again once that ends.
+    case calibrating
     case unavailable(Feature)
     case batteryUnreadable
 }

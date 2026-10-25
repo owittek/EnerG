@@ -1,38 +1,40 @@
+import Foundation
+
 /// Writes an `Actuation` through `Hardware`, only the fields that changed or, for the LED, that macOS changed, and
-/// keeps what the writes reported: the Charge Limit in effect and the Features whose writes failed. Not thread-safe:
-/// call from the Engine's serial context.
+/// keeps what the writes reported: the Charge Limit written and the Features whose writes failed. Whether the Charge
+/// Limit took is judged by `limitCheck`, which can ask for it to be written again. Not thread-safe: call from the
+/// Engine's serial context.
 final class Actuator {
     private let hardware: any Hardware
     /// Last actuation written; nil means unknown, so everything is written.
     private var applied: Actuation?
-    /// What `setChargeLimit` reported in effect; nil when off, unavailable or not written yet.
-    private(set) var effectiveLimit: Int?
+    /// The Charge Limit last written successfully; nil when off, failed or not written yet.
+    private var writtenLimit: Int?
     /// Features whose write failed; not written again until `reset`.
     private(set) var unavailable: Set<Feature> = []
     /// The last Charge Limit write left the adapter cut; a second one in a row makes it unavailable.
     private var adapterLeftCut = false
     /// A write is to be retried: the next `apply` re-asserts everything.
     private var retryNextApply = false
-    /// The Charge Limit last asked for; kept apart from `applied`, which a retry clears, so the warning holds.
-    private var requestedLimit: Int?
-    /// The last Charge Limit write was below 80 and made while unplugged, so it was returned unverified.
-    private var limitUnverified = false
+    private(set) var limitCheck = LimitCheck()
 
     init(hardware: any Hardware) {
         self.hardware = hardware
     }
 
-    /// A Charge Limit below 80 didn't take, so 80 is in effect.
-    var lowLimitUnsupported: Bool {
-        Policy.lowLimitUnsupported(effective: effectiveLimit, requested: requestedLimit)
+    /// The Charge Limit in effect: the one written, or what the firmware holds when a lower one didn't take.
+    var effectiveLimit: Int? {
+        if case .unsupported(let held) = limitCheck.verdict { return held }
+        return writtenLimit
     }
 
     /// Daemon launch: hardware state is unknown and every Feature is tried again.
     func reset() {
         applied = nil
-        effectiveLimit = nil
+        writtenLimit = nil
         unavailable = []
         adapterLeftCut = false
+        limitCheck = LimitCheck()
     }
 
     /// Hardware state is unknown, e.g. after sleep: the next `apply` writes everything.
@@ -40,22 +42,20 @@ final class Actuator {
         applied = nil
     }
 
-    /// Writes what differs from the last `apply`. `previous` and `current` are the snapshots before and at this
-    /// event; nil when unreadable. `retryFailures`: a failed write is retried on the next `apply` instead of making
+    /// Writes what differs from the last `apply`, then lets `limitCheck` judge `snapshot` (read at `now`, before these
+    /// writes; nil when unreadable). `retryFailures`: a failed write is retried on the next `apply` instead of making
     /// its Feature unavailable.
-    func apply(_ next: Actuation, previous: BatterySnapshot?, current: BatterySnapshot?, retryFailures: Bool) {
-        if needsReverify(from: previous, to: current) || changed(\.chargeLimit, to: next) {
-            write(.chargeLimit, retryFailures: retryFailures) {
-                effectiveLimit = nil
-                effectiveLimit = try hardware.setChargeLimit(next.chargeLimit)
-                limitUnverified = current?.adapterConnected == false
-                    && (next.chargeLimit ?? NativeLimit.powerUIMinimum) < NativeLimit.powerUIMinimum
-            }
+    func apply(_ next: Actuation, snapshot: BatterySnapshot?, now: Date, retryFailures: Bool) {
+        if changed(\.chargeLimit, to: next) {
+            writeLimit(next.chargeLimit, now: now, retryFailures: retryFailures)
+        }
+        let requested = unavailable.contains(.chargeLimit) ? nil : next.chargeLimit
+        if limitCheck.observe(requested: requested, snapshot: snapshot, now: now) {
+            writeLimit(next.chargeLimit, now: now, retryFailures: retryFailures)
         }
         if changed(\.led, to: next) || ledDrifted(from: next.led) {
             write(.led, retryFailures: retryFailures) { try hardware.setLED(next.led) }
         }
-        requestedLimit = next.chargeLimit
         applied = next
         if retryNextApply {
             applied = nil
@@ -69,11 +69,13 @@ final class Actuator {
         applied?.led = .system
     }
 
-    /// A limit below 80 set while unplugged was returned unverified; the plug-in applies it, so it is set again to
-    /// check. Only on the plug-in after such a set: the re-set is made plugged in, so it clears the flag and later
-    /// plug-ins leave the limit alone.
-    private func needsReverify(from previous: BatterySnapshot?, to current: BatterySnapshot?) -> Bool {
-        previous?.adapterConnected == false && current?.adapterConnected == true && limitUnverified
+    private func writeLimit(_ limit: Int?, now: Date, retryFailures: Bool) {
+        write(.chargeLimit, retryFailures: retryFailures) {
+            writtenLimit = nil
+            try hardware.setChargeLimit(limit)
+            writtenLimit = limit
+        }
+        limitCheck.wrote(at: now)
     }
 
     /// macOS changed the LED on its own, e.g. a few seconds after an unplug. A system-driven LED reads as a colour,

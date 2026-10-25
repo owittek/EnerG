@@ -36,6 +36,7 @@ struct LabelTests {
 
     @Test func warningLabel() {
         #expect(Warning.lowLimitUnsupported.label == "This Mac doesn't accept limits below 80%. Holding at 80%.")
+        #expect(Warning.calibrating.label == "Charge Limit paused by macOS")
         #expect(Warning.unavailable(.chargeLimit).label == "Charge Limit is unavailable on this Mac.")
         #expect(Warning.unavailable(.led).label == "MagSafe LED control is unavailable on this Mac.")
         #expect(Warning.batteryUnreadable.label == "Can't read the battery state.")

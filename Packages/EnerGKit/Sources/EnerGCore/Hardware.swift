@@ -4,10 +4,9 @@ public protocol Hardware: AnyObject {
     /// Reads the battery. An adapter may also turn a cut adapter back on here, so call it after a write that threw
     /// `HardwareError.adapterCut`.
     func snapshot() throws -> BatterySnapshot
-    /// Sets the native Charge Limit; nil disables it. Returns the limit now in effect: `percent`, or 80 when
-    /// this Mac doesn't accept a value below 80; nil when disabled.
-    /// Throws `HardwareError.adapterCut` when a pulse left the adapter cut.
-    func setChargeLimit(_ percent: Int?) throws -> Int?
+    /// Sets the native Charge Limit; nil disables it. Whether a limit took is judged later from snapshots
+    /// (`BatterySnapshot.firmwareLimit`). Throws `HardwareError.adapterCut` when a pulse left the adapter cut.
+    func setChargeLimit(_ percent: Int?) throws
     func setLED(_ state: LEDState) throws
     /// The LED state the hardware holds now; nil when unreadable. macOS can change it on its own, e.g. a few seconds
     /// after an unplug. Reads `.green` or `.orange` while the system drives it, so only `.off`, `.green` and `.orange`

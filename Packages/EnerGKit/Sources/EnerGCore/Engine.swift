@@ -1,3 +1,5 @@
+import Foundation
+
 public enum Event: Equatable, Sendable {
     /// Daemon launch: re-applies all state.
     case start
@@ -16,10 +18,12 @@ public final class Engine {
     public private(set) var settings: Settings
     private let hardware: any Hardware
     private let actuator: Actuator
+    private let now: () -> Date
     private var session = Session()
     private var snapshot: BatterySnapshot?
 
-    public init(hardware: any Hardware, settings: Settings) {
+    public init(hardware: any Hardware, settings: Settings, now: @escaping () -> Date = Date.init) {
+        self.now = now
         self.hardware = hardware
         self.actuator = Actuator(hardware: hardware)
         self.settings = settings
@@ -71,7 +75,6 @@ public final class Engine {
     private var paused: Bool { Policy.isPaused(settings, session) }
 
     private func evaluate(retryFailures: Bool) {
-        let previous = snapshot
         let current: BatterySnapshot
         do {
             current = try hardware.snapshot()
@@ -80,14 +83,14 @@ public final class Engine {
             snapshot = nil
             if paused {
                 Policy.clearForPause(&session)
-                actuator.apply(.released, previous: previous, current: nil, retryFailures: retryFailures)
+                actuator.apply(.released, snapshot: nil, now: now(), retryFailures: retryFailures)
             }
             return
         }
         snapshot = current
         Policy.update(settings: settings, snapshot: current, session: &session)
         actuator.apply(Policy.actuation(settings: settings, snapshot: current, session: session),
-                       previous: previous, current: current, retryFailures: retryFailures)
+                       snapshot: current, now: now(), retryFailures: retryFailures)
     }
 
     /// A kickstart can't be told apart from a bootout, so the native Charge Limit stays as is.
@@ -98,7 +101,11 @@ public final class Engine {
 
     private func status() -> Status {
         var warnings: [Warning] = []
-        if actuator.lowLimitUnsupported { warnings.append(.lowLimitUnsupported) }
+        switch actuator.limitCheck.verdict {
+        case .calibrating: warnings.append(.calibrating)
+        case .unsupported: warnings.append(.lowLimitUnsupported)
+        case .none, .ok, .mismatch: break
+        }
         warnings += Feature.allCases.filter(actuator.unavailable.contains).map(Warning.unavailable)
         if snapshot == nil { warnings.append(.batteryUnreadable) }
         return Status(state: state(), settings: settings, snapshot: snapshot,

@@ -57,84 +57,86 @@ struct LimitTests {
         #expect(engine.handle(.tick).effectiveLimit == 80)
     }
 
-    // The fallback is reported, and not retried every tick (each retry may pulse the adapter).
-    @Test func sub80FallbackWarnsAndRetriesOnlyOnWakeOrChange() {
+/// Sets 60 on a Mac that clamps it, then ticks until the first rewrite has settled.
+    private func unsupported() -> (Engine, FakeHardware) {
+        let (engine, hw) = started { $0.acceptsBelow80 = false }
+        engine.handle(.command(.setLimit(60)))
+        hw.advance(31)
+        engine.handle(.tick)
+        hw.advance(600)
+        engine.handle(.tick)
+        hw.advance(31)
+        engine.handle(.tick)
+        return (engine, hw)
+    }
+
+    // Each rewrite may pulse the adapter: wait, retry with backoff, and only then report it.
+    @Test func aClampedLimitIsRetriedThenReported() {
         let (engine, hw) = started { $0.acceptsBelow80 = false }
         var status = engine.handle(.command(.setLimit(60)))
         #expect(hw.writes == [.limit(60)])
-        #expect(status.effectiveLimit == 80)
-        #expect(status.warnings.contains(.lowLimitUnsupported))
-
+        #expect(status.effectiveLimit == 60)
         hw.writes.removeAll()
-        engine.handle(.tick)
-        engine.handle(.powerChanged)
+        hw.advance(31)
+        status = engine.handle(.tick)
         #expect(hw.writes.isEmpty)
-
-        status = engine.handle(.didWake)
-        #expect(hw.writes == [.limit(60), .led(.orange)])
-        #expect(status.warnings.contains(.lowLimitUnsupported))
-
-        status = engine.handle(.command(.setLimit(85)))
-        #expect(status.effectiveLimit == 85)
-        #expect(!status.warnings.contains(.lowLimitUnsupported))
-    }
-
-    // Set while unplugged, a limit below 80 is unverified; the plug-in re-sets it, so a clamping macOS shows 80.
-    @Test func pluggingInReverifiesALimitBelowEighty() {
-        let (engine, hw) = started { $0.acceptsBelow80 = false }
-        hw.snap.adapterConnected = false
-        hw.snap.isCharging = false
-        engine.handle(.powerChanged)
-        #expect(engine.handle(.command(.setLimit(60))).effectiveLimit == 60)
-        hw.writes.removeAll()
-        hw.snap.adapterConnected = true
-        let status = engine.handle(.powerChanged)
-        #expect(hw.writes.contains(.limit(60)))
+        #expect(status.warnings.isEmpty)
+        hw.advance(600)
+        engine.handle(.tick)
+        #expect(hw.writes == [.limit(60)])
+        hw.advance(31)
+        status = engine.handle(.tick)
         #expect(status.effectiveLimit == 80)
-        #expect(status.warnings.contains(.lowLimitUnsupported))
+        #expect(status.warnings == [.lowLimitUnsupported])
     }
 
-    @Test func theReverifyHappensOncePerUnverifiedSet() {
-        let (engine, hw) = started { $0.acceptsBelow80 = false }
-        hw.snap.adapterConnected = false
-        hw.snap.isCharging = false
-        engine.handle(.powerChanged)
-        engine.handle(.command(.setLimit(60)))
-        hw.snap.adapterConnected = true
-        engine.handle(.powerChanged)
-        hw.writes.removeAll()
-        hw.snap.adapterConnected = false
-        engine.handle(.powerChanged)
-        hw.snap.adapterConnected = true
-        engine.handle(.powerChanged)
+    @Test func aLimitChangeClearsUnsupported() {
+        let (engine, _) = unsupported()
+        let status = engine.handle(.command(.setLimit(85)))
+        #expect(status.effectiveLimit == 85)
+        #expect(status.warnings.isEmpty)
+    }
+
+    // The bug from 2026-10-25: Calibration must neither fall back nor pulse, and must say what is going on.
+    @Test func calibrationWarnsAndWritesNothing() {
+        let (engine, hw) = started(Settings(chargeLimit: 60))
+        hw.calibrating = true
+        hw.advance(31)
+        var status = engine.handle(.tick)
+        #expect(status.warnings == [.calibrating])
+        #expect(status.effectiveLimit == 60)
+        hw.advance(6 * 3600)
+        status = engine.handle(.tick)
         #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
+        hw.calibrating = false
+        status = engine.handle(.tick)
+        #expect(status.warnings.isEmpty)
     }
 
-    @Test func aLimitBelowEightySetWhilePluggedInIsNotResetOnALaterPlugIn() {
+    @Test func noCalibrationWarningWhileUnpluggedPausedOrToppingUp() {
+        let (engine, hw) = started(Settings(chargeLimit: 60))
+        hw.calibrating = true
+        hw.advance(31)
+        var status = engine.handle(.tick)
+        #expect(status.warnings == [.calibrating])
+        status = engine.handle(.command(.topUp))
+        #expect(status.warnings.isEmpty)
+        engine.handle(.command(.cancelTopUp))
+        status = engine.handle(.command(.setPaused(true)))
+        #expect(status.warnings.isEmpty)
+        engine.handle(.command(.setPaused(false)))
+        hw.snap.adapterConnected = false
+        hw.snap.isCharging = false
+        status = engine.handle(.powerChanged)
+        #expect(status.warnings.isEmpty)
+    }
+
+        @Test func aLimitBelowEightySetWhilePluggedInIsNotResetOnALaterPlugIn() {
         let (engine, hw) = started { $0.acceptsBelow80 = false }
         engine.handle(.command(.setLimit(60)))
         hw.writes.removeAll()
         hw.snap.adapterConnected = false
         hw.snap.isCharging = false
-        engine.handle(.powerChanged)
-        hw.snap.adapterConnected = true
-        engine.handle(.powerChanged)
-        #expect(!hw.writes.contains { if case .limit = $0 { true } else { false } })
-    }
-
-    // Without AC-W the plug reads from ExternalConnected, so a cut adapter flickers as unplugged.
-    @Test func aFlickerAfterTheReverifyWritesNoSecondLimit() {
-        let (engine, hw) = started { $0.acceptsBelow80 = false; $0.snap.plugSensed = false }
-        hw.snap.adapterConnected = false
-        hw.snap.isCharging = false
-        engine.handle(.powerChanged)
-        engine.handle(.command(.setLimit(60)))
-        hw.writes.removeAll()
-        hw.snap.adapterConnected = true
-        engine.handle(.powerChanged)
-        #expect(hw.writes.filter { $0 == .limit(60) }.count == 1)
-        hw.writes.removeAll()
-        hw.snap.adapterConnected = false
         engine.handle(.powerChanged)
         hw.snap.adapterConnected = true
         engine.handle(.powerChanged)
@@ -142,8 +144,7 @@ struct LimitTests {
     }
 
     @Test func lowLimitUnsupportedSurvivesAWakeReassertWithAFailedWrite() {
-        let (engine, hw) = started { $0.acceptsBelow80 = false }
-        #expect(engine.handle(.command(.setLimit(60))).warnings.contains(.lowLimitUnsupported))
+        let (engine, hw) = unsupported()
         hw.failing = [.led]
         let status = engine.handle(.didWake)
         #expect(status.effectiveLimit == 80)
@@ -195,8 +196,7 @@ struct LimitTests {
     }
 
     @Test func limitDrainFollowsTheEffectiveLimit() {
-        let (engine, hw) = started { $0.acceptsBelow80 = false }
-        engine.handle(.command(.setLimit(60)))   // falls back: 80 in effect
+        let (engine, hw) = unsupported()   // 80 in effect
         hw.snap.percent = 70
         hw.snap.isCharging = false
         #expect(engine.handle(.tick).state == .atLimit)

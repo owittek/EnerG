@@ -45,7 +45,7 @@ enum Policy {
         paused || toppingUp || settings.chargeLimit >= 100 ? nil : settings.chargeLimit
     }
 
-    /// A Charge Limit below 80 didn't take: more is in effect than was asked for. `Status.predicted` uses it too.
+    /// A Charge Limit below 80 didn't take: more is in effect than was asked for. `Status.predicted` uses it.
     static func lowLimitUnsupported(effective: Int?, requested: Int?) -> Bool {
         guard let effective, let requested else { return false }
         return effective > requested

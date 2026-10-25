@@ -1,3 +1,4 @@
+import Foundation
 @testable import EnerGCore
 
 /// Records writes; tests set `snap` to simulate the battery.
@@ -16,19 +17,28 @@ final class FakeHardware: Hardware {
     var adapterCuts = 0
     var snapshotFails = false
     var snapshotCalls = 0
-    /// false: limits below 80 don't take and 80 is in effect instead, like a macOS that clamps the override (once
-    /// plugged in).
+    /// false: limits below 80 read as 80 in `CHLT`, like a macOS that clamps the override.
     var acceptsBelow80 = true
+    /// What `CHLT[0]` holds; limit writes land here, clamped to 80 without `acceptsBelow80`.
+    var chlt: Int? = 80
+    /// macOS ignores every limit (Calibration): snapshots read `CHLT` off.
+    var calibrating = false
+    /// The Engine's clock (see `started`).
+    var now = Date(timeIntervalSince1970: 0)
     /// What `readLED` returns: the last LED written; tests set it to simulate macOS changing the LED.
     var led: LEDState?
+
+    func advance(_ seconds: TimeInterval) { now += seconds }
 
     func snapshot() throws -> BatterySnapshot {
         snapshotCalls += 1
         if snapshotFails { throw HardwareError.io(-1) }
-        return snap
+        var s = snap
+        s.firmwareLimit = calibrating ? nil : chlt
+        return s
     }
 
-    func setChargeLimit(_ percent: Int?) throws -> Int? {
+    func setChargeLimit(_ percent: Int?) throws {
         if failing.contains(.chargeLimit) { throw HardwareError.notPrivileged }
         if let percent, failingLimits.contains(percent) { throw HardwareError.io(-2) }
         if percent != nil, adapterCuts > 0 {
@@ -36,9 +46,7 @@ final class FakeHardware: Hardware {
             throw HardwareError.adapterCut
         }
         writes.append(.limit(percent))
-        // Unplugged, the real NativeLimit returns a value below 80 unverified: only the plug-in applies it.
-        if let percent, percent < 80, !acceptsBelow80, snap.adapterConnected { return 80 }
-        return percent
+        chlt = percent.map { acceptsBelow80 ? $0 : max($0, 80) }
     }
 
     func setLED(_ state: LEDState) throws {
@@ -55,7 +63,7 @@ func started(_ settings: Settings = Settings(),
              _ configure: (FakeHardware) -> Void = { _ in }) -> (Engine, FakeHardware) {
     let hw = FakeHardware()
     configure(hw)
-    let engine = Engine(hardware: hw, settings: settings)
+    let engine = Engine(hardware: hw, settings: settings, now: { hw.now })
     engine.handle(.start)
     hw.writes.removeAll()
     return (engine, hw)
