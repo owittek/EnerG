@@ -21,6 +21,12 @@ struct IsChargingTests {
         #expect(charging([60, 0x05, 0x00], percent: 59))
     }
 
+    @Test func firmwareLimitIsByteZeroUnlessOff() {
+        #expect(BatterySnapshot.firmwareLimit(chlt: nil) == nil)
+        #expect(BatterySnapshot.firmwareLimit(chlt: [0, 0x05, 0x00]) == nil)
+        #expect(BatterySnapshot.firmwareLimit(chlt: [60, 0x05, 0x05]) == 60)
+    }
+
     @Test func fallsBackToTheRegistry() {
         #expect(charging(nil, registry: true))
         #expect(charging([0, 0x05, 0x00], registry: true))      // limit off: 00 doesn't mean charging

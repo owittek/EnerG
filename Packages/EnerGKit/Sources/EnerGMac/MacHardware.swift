@@ -50,7 +50,7 @@ public final class MacHardware: Hardware, LimitControls {
             batteryWatts: liveBatteryWatts() ?? milliamps * millivolts / 1_000_000,
             systemWatts: (try? readFloat("PSTR")).map(Double.init),
             plugSensed: plugged != nil,
-            firmwareLimit: chlt.flatMap { $0[0] == 0 ? nil : Int($0[0]) }
+            firmwareLimit: BatterySnapshot.firmwareLimit(chlt: chlt)
         )
     }
 
@@ -110,10 +110,8 @@ public final class MacHardware: Hardware, LimitControls {
         notify_post("com.apple.smartcharging.defaultschanged")
     }
 
-    /// `CHLT` = `[limit, band, status]`; byte 0 is the limit the firmware enforces, 0 when off.
     public func smcLimit() -> Int? {
-        guard let bytes = try? read("CHLT", size: 3), bytes[0] != 0 else { return nil }
-        return Int(bytes[0])
+        BatterySnapshot.firmwareLimit(chlt: try? read("CHLT", size: 3))
     }
 
     /// Unknown counts as plugged in: a pulse with nothing plugged in is harmless.

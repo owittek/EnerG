@@ -89,6 +89,13 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
 }
 
 extension BatterySnapshot {
+    /// The limit the firmware enforces, from SMC `CHLT` = `[limit, band, status]`: byte 0, nil when 0 (off) or
+    /// unreadable.
+    public static func firmwareLimit(chlt: [UInt8]?) -> Int? {
+        guard let limit = chlt?.first, limit != 0 else { return nil }
+        return Int(limit)
+    }
+
     /// Whether the battery is charging. While the native limit is on, SMC `CHLT` = `[limit, band, status]` says so
     /// live: status `00` charging, `03` Limit Drain, `05` holding. At or above the limit, `00` reads as not charging: the
     /// firmware shows it for about a second after a limit write, before settling on `05`. A real top-off within the
