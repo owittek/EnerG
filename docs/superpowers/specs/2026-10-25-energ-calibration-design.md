@@ -8,12 +8,13 @@ On 2026-10-25 macOS started a battery calibration charge (PowerUI: `ChargingUpFo
 
 ## Behaviour
 
-- `CHLT` off while a limit is requested and the adapter is plugged in means **Calibration**. EnerG shows a tile, writes nothing and doesn't pulse. The override stays in place, so macOS applies the limit by itself once calibration ends.
-- `CHLT` reads a value other than the requested limit: EnerG writes the limit again (override, notify, pulse if needed) 10 min later, then after 20, 40, 80 and 160 min, staying at 160. If it still reads wrong after the first retry, the limit is **unsupported**. EnerG shows today's tile and reports the `CHLT` value as the limit in effect.
+- `CHLT` off while a limit is requested and the adapter is plugged in means **Calibration**. EnerG shows a tile, writes nothing and doesn't pulse. No limit is in effect, so the status line shows plain "Charging"/"Not charging". The override stays in place, so macOS applies the limit by itself once calibration ends. A limit write (wake, start, limit change) during Calibration writes the override but skips the pulse while `CHLT` still reads off. Calibration clears the retry state.
+- `CHLT` reads a value other than the requested limit: EnerG reports that value as the limit in effect and writes the limit again (override, notify, pulse if needed) 10 min later, then after 20, 40, 80 and 160 min, staying at 160. Only a limit below 80 can be **unsupported**: when it still reads wrong after the first retry, EnerG shows today's tile and stops the timed retries. The override stays in place; a plug-in or limit change starts fresh, and a wake re-asserts the limit.
 - `CHLT` equals the requested limit: no tile, and the retry state is cleared.
 - Reads within 30 s of a limit write can be stale. They don't change the verdict.
 - The retry state also resets on a limit change and on a plug or unplug event.
 - Unplugged, paused or topping up: no verdict, no tile.
+- Releasing the limit (off, Pause, Top Up) first puts 80 back when the override or `CHLT` is below 80, so System Settings never holds a value it can't show.
 
 ## Architecture
 
@@ -30,10 +31,10 @@ On 2026-10-25 macOS started a battery calibration charge (PowerUI: `ChargingUpFo
 
 - `mutating func wrote(at: Date)`: a limit write was made.
 - `mutating func observe(requested: Int?, snapshot: BatterySnapshot?, now: Date) -> Bool`: updates the verdict and returns true when the limit should be written again now. Unplugged resets the state, so a plug-in starts fresh: no `previous` snapshot needed. A fresh start (plug-in, limit change) also waits the 30 s stale-read window.
-- `var verdict: Verdict`: `.none`, `.ok`, `.calibrating`, `.mismatch`, `.unsupported(Int)` (the value in effect).
+- `var verdict: Verdict`: `.none`, `.ok`, `.calibrating`, `.mismatch(Int)`, `.unsupported(Int)` (the value in effect).
 - A rewrite marks a limit below 80 as unsupported. At 80 and above a mismatch only retries; it never shows the unsupported tile.
 
-`effectiveLimit` = the `CHLT` value when the verdict is `.unsupported`, else the last limit written successfully (nil when off, paused, topping up or unavailable).
+`effectiveLimit` = what the firmware holds: the `CHLT` value when the verdict is `.mismatch` or `.unsupported`, nil when `.calibrating`, else the last limit written successfully (nil when off, paused, topping up or unavailable).
 
 ## Copy
 
